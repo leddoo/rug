@@ -2,6 +2,11 @@ use crate::float::*;
 use crate::geometry::*;
 
 
+// these are absolute and in pixel space.
+pub const ZERO_TOLERANCE:    f32 = 0.001;
+pub const FLATTEN_TOLERANCE: f32 = 0.1;
+
+
 pub struct Rasterizer {
     pub width:  usize,
     pub height: usize,
@@ -38,7 +43,7 @@ impl Rasterizer {
     }
 
 
-    pub fn add_segment_ps(&mut self, p0: V2f, p1: V2f) {
+    pub fn add_segment_p(&mut self, p0: V2f, p1: V2f) {
         let h = self.height as f32;
 
         let dx_over_dy = safe_div(p1.x - p0.x,  p1.y - p0.y,  0.0);
@@ -74,6 +79,7 @@ impl Rasterizer {
         let mut x_t_next = (x_next - x0) * dx_inv;
         let mut y_t_next = (y_next - y0) * dy_inv;
         let mut x_rem = x_steps;
+        let mut y_rem = y_steps;
 
         let     row_delta = (self.stride as f32).copysign(dy) as i32;
         let mut row_base  = (self.stride as f32 * y_i0) as i32;
@@ -84,7 +90,7 @@ impl Rasterizer {
             let prev_x_i  = x_i;
             let x;
             let y;
-            if x_t_next < y_t_next && x_rem > 0 {
+            if (x_t_next <= y_t_next && x_rem > 0) || y_rem == 0 {
                 x = x_next;
                 y = y0 + x_t_next*dy;
 
@@ -100,6 +106,7 @@ impl Rasterizer {
                 y_next   += y_step;
                 y_t_next += y_dt;
                 row_base += row_delta;
+                y_rem    -= 1;
             }
 
             //println!("Segment(({}, {}), ({}, {})),", x_prev, y_prev, x, y);
@@ -118,9 +125,40 @@ impl Rasterizer {
     }
 
     pub fn add_segment(&mut self, segment: Segment) {
-        self.add_segment_ps(segment.p0, segment.p1)
+        self.add_segment_p(segment.p0, segment.p1)
     }
 
+
+    pub fn add_quadratic_tol(&mut self, quadratic: Quadratic, tolerance: f32) {
+        let mut f = |p0, p1, _| {
+            self.add_segment_p(p0, p1);
+        };
+        quadratic.flatten(&mut f, tolerance*tolerance, 16);
+    }
+
+    pub fn add_quadratic(&mut self, quadratic: Quadratic) {
+        self.add_quadratic_tol(quadratic, FLATTEN_TOLERANCE)
+    }
+
+    pub fn add_quadratic_p(&mut self, p0: V2f, p1: V2f, p2: V2f) {
+        self.add_quadratic(quadratic(p0, p1, p2))
+    }
+
+
+    pub fn add_cubic_tol(&mut self, cubic: Cubic, tolerance: f32) {
+        let mut f = |p0, p1, _| {
+            self.add_segment_p(p0, p1);
+        };
+        cubic.flatten(&mut f, tolerance*tolerance, 16);
+    }
+
+    pub fn add_cubic(&mut self, cubic: Cubic) {
+        self.add_cubic_tol(cubic, FLATTEN_TOLERANCE)
+    }
+
+    pub fn add_cubic_p(&mut self, p0: V2f, p1: V2f, p2: V2f, p3: V2f) {
+        self.add_cubic(cubic(p0, p1, p2, p3))
+    }
 }
 
 
