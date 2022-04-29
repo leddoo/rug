@@ -29,6 +29,7 @@ impl Rasterizer {
         else if x_i < self.width as f32 {
             let x_mid = (x0 + x1) / 2.0 - x_i;
             let delta_right = delta * x_mid;
+            debug_assert!(x_mid >= 0.0 && x_mid <= 1.0);
 
             let x = x_i as usize;
             self.deltas[base + x + 0] += delta - delta_right;
@@ -62,9 +63,9 @@ impl Rasterizer {
         let x_i1 = x1.floor();
         let y_i1 = y1.floor();
 
-        let x_steps = (x_i1 - x_i0).abs();
-        let y_steps = (y_i1 - y_i0).abs();
-        let steps = (x_steps + y_steps) as usize;
+        let x_steps = (x_i1 - x_i0).abs() as u32;
+        let y_steps = (y_i1 - y_i0).abs() as u32;
+        let steps = x_steps + y_steps;
 
         let mut x_prev = x0;
         let mut y_prev = y0;
@@ -72,7 +73,7 @@ impl Rasterizer {
         let mut y_next = y_i0 + y_step + y_nudge;
         let mut x_t_next = (x_next - x0) * dx_inv;
         let mut y_t_next = (y_next - y0) * dy_inv;
-        let mut x_rem = x_steps as i32;
+        let mut x_rem = x_steps;
 
         let     row_delta = (self.stride as f32).copysign(dy) as i32;
         let mut row_base  = (self.stride as f32 * y_i0) as i32;
@@ -107,6 +108,10 @@ impl Rasterizer {
             x_prev = x;
             y_prev = y;
         }
+
+        debug_assert!(x_rem == 0);
+        debug_assert!(row_base == (self.stride as f32 * y_i1) as i32);
+        debug_assert!(x_i == x_i1);
 
         //println!("Segment(({}, {}), ({}, {})),", x_prev, y_prev, x1, y1);
         self.add_delta(row_base, x_i, x_prev, y_prev, x1, y1);

@@ -1,5 +1,3 @@
-use minifb::{Key, Window, WindowOptions};
-
 const WIDTH: usize = 16;
 const HEIGHT: usize = 9;
 
@@ -32,11 +30,11 @@ fn main() {
     }
     println!();
 
-    let mut window = Window::new(
+    let mut window = minifb::Window::new(
         "window",
         800,
         450,
-        WindowOptions::default(),
+        minifb::WindowOptions::default(),
     ).unwrap();
 
     window.limit_update_rate(Some(std::time::Duration::from_micros(16667)));
