@@ -1,108 +1,130 @@
+use crate::float::*;
 use crate::geometry::*;
 
 
 pub struct Rasterizer {
-    width:  usize,
-    height: usize,
-    deltas: Vec<f32>,
+    pub width:  usize,
+    pub height: usize,
+    pub stride: usize,
+    pub deltas: Vec<f32>,
 }
 
 
 impl Rasterizer {
     pub fn new(width: usize, height: usize) -> Rasterizer {
         Rasterizer {
-            width, height,
-            deltas: vec![0.0; width*height],
+            width, height, stride: width + 1,
+            deltas: vec![0.0; (width + 1) * (height + 1)],
         }
     }
 
-    pub fn width(&self)  -> usize { self.width }
-    pub fn height(&self) -> usize { self.height }
+
+    pub fn add_delta(&mut self, row_base: i32, x_i: f32, x0: f32, y0: f32, x1: f32, y1: f32) {
+        let base = row_base as usize;
+        let delta = y1 - y0;
+
+        if x_i < 0.0 {
+            self.deltas[base] += delta;
+        }
+        else if x_i < self.width as f32 {
+            let x_mid = (x0 + x1) / 2.0 - x_i;
+            let delta_right = delta * x_mid;
+
+            let x = x_i as usize;
+            self.deltas[base + x + 0] += delta - delta_right;
+            self.deltas[base + x + 1] += delta_right;
+        }
+    }
 
 
-    //fn add_delta_unchecked() {}
-
-    pub fn add_segment(&mut self, seg: Segment) {
-
-        /*
-            todo:
-                - clamp to height.
-                - don't divide by zero.
-                - add_delta & clamp to width.
-
-            - padding: +1 in y; +2 in x.
-                - floor of clamped y will always yield valid row.
-                - same for x, but x needs one more row because of add_delta().
-        */
-
-        let w = self.width as f32;
+    pub fn add_segment_ps(&mut self, p0: V2f, p1: V2f) {
         let h = self.height as f32;
 
-        // TODO: clamp.
-        let ((x0, y0), (x1, y1)) = (seg.p0.into(), seg.p1.into());
+        let dx_over_dy = safe_div(p1.x - p0.x,  p1.y - p0.y,  0.0);
+        let (x0, y0) = clamp_y(p0.x, p0.y, dx_over_dy, h);
+        let (x1, y1) = clamp_y(p1.x, p1.y, dx_over_dy, h);
 
         let dx = x1 - x0;
         let dy = y1 - y0;
+        let dx_inv = safe_div(1.0, dx, 1_000_000.0);
+        let dy_inv = safe_div(1.0, dy, 1_000_000.0);
 
         let x_step = 1f32.copysign(dx);
         let y_step = 1f32.copysign(dy);
+        let x_nudge = if dx >= 0.0 { 0f32 } else { 1f32 };
+        let y_nudge = if dy >= 0.0 { 0f32 } else { 1f32 };
 
-        let x_nudge = if x0 <= x1 { 0f32 } else { 1f32 };
-        let y_nudge = if y0 <= y1 { 0f32 } else { 1f32 };
-
-        let x_dt = 1f32/dx;
-        let y_dt = 1f32/dy;
+        let x_dt = dx_inv.abs();
+        let y_dt = dy_inv.abs();
 
         let x_i0 = x0.floor();
         let y_i0 = y0.floor();
         let x_i1 = x1.floor();
         let y_i1 = y1.floor();
 
-        let steps = ((x_i1 - x_i0).abs() + (y_i1 + y_i0).abs()) as usize;
-
-
-        let mut x_i = x_i0 as i32;
-        let mut y_i = y_i0 as i32;
+        let x_steps = (x_i1 - x_i0).abs();
+        let y_steps = (y_i1 - y_i0).abs();
+        let steps = (x_steps + y_steps) as usize;
 
         let mut x_prev = x0;
         let mut y_prev = y0;
         let mut x_next = x_i0 + x_step + x_nudge;
         let mut y_next = y_i0 + y_step + y_nudge;
-        let mut x_t_next = (x_next - x0) / dx;
-        let mut y_t_next = (y_next - y0) / dy;
+        let mut x_t_next = (x_next - x0) * dx_inv;
+        let mut y_t_next = (y_next - y0) * dy_inv;
+        let mut x_rem = x_steps as i32;
+
+        let     row_delta = (self.stride as f32).copysign(dy) as i32;
+        let mut row_base  = (self.stride as f32 * y_i0) as i32;
+        let mut x_i = x_i0;
 
         for _ in 0..steps {
-            //println!("Polygon(({}, {}), ({}, {}), ({}, {}), ({}, {})),",
-                //x_i, y_i, x_i + 1, y_i, x_i + 1, y_i + 1, x_i, y_i + 1);
-
+            let prev_base = row_base;
+            let prev_x_i  = x_i;
             let x;
             let y;
-            if x_t_next < y_t_next {
+            if x_t_next < y_t_next && x_rem > 0 {
                 x = x_next;
                 y = y0 + x_t_next*dy;
 
-                x_i      += 1;
                 x_next   += x_step;
-                x_t_next += x_dt
+                x_t_next += x_dt;
+                x_i      += x_step;
+                x_rem    -= 1;
             }
             else {
                 x = x0 + y_t_next*dx;
                 y = y_next;
 
-                y_i      += 1;
                 y_next   += y_step;
-                y_t_next += y_dt
+                y_t_next += y_dt;
+                row_base += row_delta;
             }
 
             //println!("Segment(({}, {}), ({}, {})),", x_prev, y_prev, x, y);
-
-            // add_delta(x_prev, x, y_prev, y);
+            self.add_delta(prev_base, prev_x_i, x_prev, y_prev, x, y);
 
             x_prev = x;
             y_prev = y;
         }
 
-        // add_delta(x_prev, x1, y_prev, y1);
-
+        //println!("Segment(({}, {}), ({}, {})),", x_prev, y_prev, x1, y1);
+        self.add_delta(row_base, x_i, x_prev, y_prev, x1, y1);
     }
+
+    pub fn add_segment(&mut self, segment: Segment) {
+        self.add_segment_ps(segment.p0, segment.p1)
+    }
+
+}
+
+
+fn clamp_y(x: f32, y: f32, dx_over_dy: f32, h: f32) -> (f32, f32) {
+    if y < 0.0 {
+        return (x + dx_over_dy*(0.0 - y), 0.0);
+    }
+    if y > h {
+        return (x + dx_over_dy*(h - y), h);
+    }
+    (x, y)
 }
