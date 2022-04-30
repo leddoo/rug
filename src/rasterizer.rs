@@ -5,6 +5,7 @@ use crate::geometry::*;
 // these are absolute and in pixel space.
 pub const ZERO_TOLERANCE:    f32 = 0.001;
 pub const FLATTEN_TOLERANCE: f32 = 0.1;
+pub const FLATTEN_RECURSION: u32 = 16;
 
 
 pub struct Rasterizer {
@@ -12,6 +13,8 @@ pub struct Rasterizer {
     pub height: usize,
     pub stride: usize,
     pub deltas: Vec<f32>,
+    pub flatten_tolerance: f32,
+    pub flatten_recursion: u32,
 }
 
 
@@ -20,6 +23,8 @@ impl Rasterizer {
         Rasterizer {
             width, height, stride: width + 1,
             deltas: vec![0.0; (width + 1) * (height + 1)],
+            flatten_tolerance: FLATTEN_TOLERANCE,
+            flatten_recursion: FLATTEN_RECURSION,
         }
     }
 
@@ -129,15 +134,13 @@ impl Rasterizer {
     }
 
 
-    pub fn add_quadratic_tol(&mut self, quadratic: Quadratic, tolerance: f32) {
+    pub fn add_quadratic(&mut self, quadratic: Quadratic) {
+        let tol = squared(self.flatten_tolerance);
+        let rec = self.flatten_recursion;
         let mut f = |p0, p1, _| {
             self.add_segment_p(p0, p1);
         };
-        quadratic.flatten(&mut f, tolerance*tolerance, 16);
-    }
-
-    pub fn add_quadratic(&mut self, quadratic: Quadratic) {
-        self.add_quadratic_tol(quadratic, FLATTEN_TOLERANCE)
+        quadratic.flatten(&mut f, tol, rec);
     }
 
     pub fn add_quadratic_p(&mut self, p0: V2f, p1: V2f, p2: V2f) {
@@ -145,15 +148,13 @@ impl Rasterizer {
     }
 
 
-    pub fn add_cubic_tol(&mut self, cubic: Cubic, tolerance: f32) {
+    pub fn add_cubic(&mut self, cubic: Cubic) {
+        let tol = squared(self.flatten_tolerance);
+        let rec = self.flatten_recursion;
         let mut f = |p0, p1, _| {
             self.add_segment_p(p0, p1);
         };
-        cubic.flatten(&mut f, tolerance*tolerance, 16);
-    }
-
-    pub fn add_cubic(&mut self, cubic: Cubic) {
-        self.add_cubic_tol(cubic, FLATTEN_TOLERANCE)
+        cubic.flatten(&mut f, tol, rec);
     }
 
     pub fn add_cubic_p(&mut self, p0: V2f, p1: V2f, p2: V2f, p3: V2f) {

@@ -7,3 +7,8 @@ pub fn safe_div(num: f32, denom: f32, default: f32) -> f32 {
         default
     }
 }
+
+#[inline(always)]
+pub fn squared(v: f32) -> f32 {
+    v*v
+}

@@ -1,6 +1,5 @@
 todo:
 - rasterizer:
-    - tolerance field.
 
 
 optimization ideas:
