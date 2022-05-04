@@ -21,15 +21,19 @@ pub struct Rasterizer<A: Allocator = Global> {
 
 impl Rasterizer {
     pub fn new(width: u32, height: u32) -> Rasterizer {
-        Rasterizer {
-            deltas: ImageF32::new(width + 1, height + 1),
-            flatten_tolerance: FLATTEN_TOLERANCE,
-            flatten_recursion: FLATTEN_RECURSION,
-        }
+        Rasterizer::new_in(width, height, Global)
     }
 }
 
 impl<A: Allocator> Rasterizer<A> {
+    pub fn new_in(width: u32, height: u32, allocator: A) -> Rasterizer<A> {
+        Rasterizer {
+            deltas: ImageF32::new_in(width + 1, height + 1, allocator),
+            flatten_tolerance: FLATTEN_TOLERANCE,
+            flatten_recursion: FLATTEN_RECURSION,
+        }
+    }
+
     pub fn width(&self)  -> u32 { self.deltas.width() - 1 }
     pub fn height(&self) -> u32 { self.deltas.height() - 1 }
 
@@ -48,8 +52,7 @@ impl<A: Allocator> Rasterizer<A> {
             }
         }
 
-        deltas.truncate_width(w);
-        deltas.truncate_height(h);
+        deltas.truncate(w, h);
         deltas
     }
 

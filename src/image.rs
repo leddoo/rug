@@ -76,6 +76,11 @@ impl<T: Copy + Default, const CHANNELS: usize, A: Allocator> RawImage<T, CHANNEL
         assert!(new_height <= self.height);
         self.height = new_height;
     }
+
+    pub fn truncate(&mut self, new_width: u32, new_height: u32) {
+        self.truncate_width(new_width);
+        self.truncate_height(new_height);
+    }
 }
 
 
