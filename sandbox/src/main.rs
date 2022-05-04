@@ -54,7 +54,7 @@ fn main() {
         if w != buffer_width || h != buffer_height {
             buffer_width  = w;
             buffer_height = h;
-            buffer = render(&face, w, h);
+            buffer = render(&face, w as u32, h as u32);
         }
 
         window.update_with_buffer(&buffer, buffer_width, buffer_height).unwrap();
@@ -64,7 +64,8 @@ fn main() {
 
 use ttf_parser as ttf;
 
-fn render(face: &ttf_parser::Face, w: usize, h: usize) -> Vec<u32> {
+#[inline(never)]
+fn render(face: &ttf_parser::Face, w: u32, h: u32) -> Vec<u32> {
 
     let t0 = std::time::Instant::now();
 
@@ -75,7 +76,7 @@ fn render(face: &ttf_parser::Face, w: usize, h: usize) -> Vec<u32> {
 
     let cell_size = face.height() as f32 * FONT_SIZE / units_per_em as f32;
 
-    let columns = w / cell_size as usize;
+    let columns = w / cell_size as u32;
 
     let mut r = Rasterizer::new(w, h);
 
@@ -106,15 +107,15 @@ fn render(face: &ttf_parser::Face, w: usize, h: usize) -> Vec<u32> {
         }
     }
 
-    let mut buffer: Vec<u32> = vec![0; w*h];
+    let mut buffer: Vec<u32> = vec![0; (w*h) as usize];
 
-    for y in 0..r.height {
-        let mut a = 0.0;
-        for x in 0..r.width {
-            a += r.deltas[y*r.stride + x];
-            let a = a.abs().min(1.0).powf(1.0/2.2);
+    let alpha = r.accumulate();
+
+    for y in 0..h {
+        for x in 0..w {
+            let a = alpha.raw_index(y*alpha.stride() + x).powf(1.0/2.2);
             let c = (a * 255.0) as u32;
-            buffer[(h - 1 - y)*w + x] = c << 16 | c << 8 | c;
+            buffer[((h - 1 - y)*w + x) as usize] = c << 16 | c << 8 | c;
         }
     }
 

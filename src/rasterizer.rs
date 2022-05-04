@@ -1,8 +1,9 @@
 extern crate alloc;
-use alloc::{vec, vec::*};
+use alloc::alloc::*;
 
 use crate::float::Float;
 use crate::geometry::*;
+use crate::image::*;
 
 
 // these are absolute and in pixel space.
@@ -11,52 +12,73 @@ pub const FLATTEN_TOLERANCE: f32 = 0.1;
 pub const FLATTEN_RECURSION: u32 = 16;
 
 
-pub struct Rasterizer {
-    pub width:  usize,
-    pub height: usize,
-    pub stride: usize,
-    pub deltas: Vec<f32>,
+pub struct Rasterizer<A: Allocator = Global> {
+    deltas: ImageF32<1, A>,
     pub flatten_tolerance: f32,
     pub flatten_recursion: u32,
 }
 
 
 impl Rasterizer {
-    pub fn new(width: usize, height: usize) -> Rasterizer {
+    pub fn new(width: u32, height: u32) -> Rasterizer {
         Rasterizer {
-            width, height, stride: width + 1,
-            deltas: vec![0.0; (width + 1) * (height + 1)],
+            deltas: ImageF32::new(width + 1, height + 1),
             flatten_tolerance: FLATTEN_TOLERANCE,
             flatten_recursion: FLATTEN_RECURSION,
         }
     }
+}
+
+impl<A: Allocator> Rasterizer<A> {
+    pub fn width(&self)  -> u32 { self.deltas.width() - 1 }
+    pub fn height(&self) -> u32 { self.deltas.height() - 1 }
+
+    pub fn accumulate(self) -> ImageF32<1, A> {
+        let w = self.width();
+        let h = self.height();
+
+        let mut deltas = self.deltas;
+        let stride = deltas.stride();
+
+        for y in 0..h {
+            let mut a = 0.0;
+            for x in 0..w {
+                a += deltas.raw_index(y*stride + x);
+                *deltas.raw_index_mut(y*stride + x) = a.abs().min(1.0);
+            }
+        }
+
+        deltas.truncate_width(w);
+        deltas.truncate_height(h);
+        deltas
+    }
 
 
-    pub fn add_delta(&mut self, row_base: i32, x_i: f32, x0: f32, y0: f32, x1: f32, y1: f32) {
-        let base = row_base as usize;
+    fn add_delta(&mut self, row_base: u32, x_i: f32, x0: f32, y0: f32, x1: f32, y1: f32) {
         let delta = y1 - y0;
 
         if x_i < 0.0 {
-            self.deltas[base] += delta;
+            *self.deltas.raw_index_mut(row_base) += delta;
         }
-        else if x_i < self.width as f32 {
+        else if x_i < self.width() as f32 {
             let x_mid = (x0 + x1) / 2.0 - x_i;
             let delta_right = delta * x_mid;
             debug_assert!(x_mid >= 0.0 && x_mid <= 1.0);
 
-            let x = x_i as usize;
-            self.deltas[base + x + 0] += delta - delta_right;
-            self.deltas[base + x + 1] += delta_right;
+            let x = x_i as u32;
+            *self.deltas.raw_index_mut(row_base + x + 0) += delta - delta_right;
+            *self.deltas.raw_index_mut(row_base + x + 1) += delta_right;
         }
     }
 
 
     pub fn add_segment_p(&mut self, p0: V2f, p1: V2f) {
-        let h = self.height as f32;
+        let stride = self.deltas.stride() as f32;
+        let height = self.height() as f32;
 
         let dx_over_dy = (p1.x - p0.x).safe_div(p1.y - p0.y, 0.0);
-        let (x0, y0) = clamp_y(p0.x, p0.y, dx_over_dy, h);
-        let (x1, y1) = clamp_y(p1.x, p1.y, dx_over_dy, h);
+        let (x0, y0) = clamp_y(p0.x, p0.y, dx_over_dy, height);
+        let (x1, y1) = clamp_y(p1.x, p1.y, dx_over_dy, height);
 
         let dx = x1 - x0;
         let dy = y1 - y0;
@@ -89,8 +111,8 @@ impl Rasterizer {
         let mut x_rem = x_steps;
         let mut y_rem = y_steps;
 
-        let     row_delta = (self.stride as f32).copysign(dy) as i32;
-        let mut row_base  = (self.stride as f32 * y_i0) as i32;
+        let     row_delta = stride.copysign(dy) as i32;
+        let mut row_base  = (stride * y_i0) as i32;
         let mut x_i = x_i0;
 
         for _ in 0..steps {
@@ -118,18 +140,18 @@ impl Rasterizer {
             }
 
             //println!("Segment(({}, {}), ({}, {})),", x_prev, y_prev, x, y);
-            self.add_delta(prev_base, prev_x_i, x_prev, y_prev, x, y);
+            self.add_delta(prev_base as u32, prev_x_i, x_prev, y_prev, x, y);
 
             x_prev = x;
             y_prev = y;
         }
 
         debug_assert!(x_rem == 0);
-        debug_assert!(row_base == (self.stride as f32 * y_i1) as i32);
+        debug_assert!(row_base == (stride * y_i1) as i32);
         debug_assert!(x_i == x_i1);
 
         //println!("Segment(({}, {}), ({}, {})),", x_prev, y_prev, x1, y1);
-        self.add_delta(row_base, x_i, x_prev, y_prev, x1, y1);
+        self.add_delta(row_base as u32, x_i, x_prev, y_prev, x1, y1);
     }
 
     pub fn add_segment(&mut self, segment: Segment) {
