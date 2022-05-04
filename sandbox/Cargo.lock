@@ -204,6 +204,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "libm"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33a33a362ce288760ec6a508b94caaec573ae7d3bbbd91b87aa0bad4456839db"
+
+[[package]]
 name = "log"
 version = "0.4.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -379,6 +385,9 @@ dependencies = [
 [[package]]
 name = "rug"
 version = "0.1.0"
+dependencies = [
+ "libm",
+]
 
 [[package]]
 name = "sandbox"

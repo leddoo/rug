@@ -1,4 +1,7 @@
-use crate::float::*;
+extern crate alloc;
+use alloc::{vec, vec::*};
+
+use crate::float::Float;
 use crate::geometry::*;
 
 
@@ -51,14 +54,14 @@ impl Rasterizer {
     pub fn add_segment_p(&mut self, p0: V2f, p1: V2f) {
         let h = self.height as f32;
 
-        let dx_over_dy = safe_div(p1.x - p0.x,  p1.y - p0.y,  0.0);
+        let dx_over_dy = (p1.x - p0.x).safe_div(p1.y - p0.y, 0.0);
         let (x0, y0) = clamp_y(p0.x, p0.y, dx_over_dy, h);
         let (x1, y1) = clamp_y(p1.x, p1.y, dx_over_dy, h);
 
         let dx = x1 - x0;
         let dy = y1 - y0;
-        let dx_inv = safe_div(1.0, dx, 1_000_000.0);
-        let dy_inv = safe_div(1.0, dy, 1_000_000.0);
+        let dx_inv = 1.0.safe_div(dx, 1_000_000.0);
+        let dy_inv = 1.0.safe_div(dy, 1_000_000.0);
 
         let x_step = 1f32.copysign(dx);
         let y_step = 1f32.copysign(dy);
@@ -135,7 +138,7 @@ impl Rasterizer {
 
 
     pub fn add_quadratic(&mut self, quadratic: Quadratic) {
-        let tol = squared(self.flatten_tolerance);
+        let tol = self.flatten_tolerance.squared();
         let rec = self.flatten_recursion;
         let mut f = |p0, p1, _| {
             self.add_segment_p(p0, p1);
@@ -149,7 +152,7 @@ impl Rasterizer {
 
 
     pub fn add_cubic(&mut self, cubic: Cubic) {
-        let tol = squared(self.flatten_tolerance);
+        let tol = self.flatten_tolerance.squared();
         let rec = self.flatten_recursion;
         let mut f = |p0, p1, _| {
             self.add_segment_p(p0, p1);

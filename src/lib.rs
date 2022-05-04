@@ -1,3 +1,5 @@
+#![no_std]
+
 pub mod float;
 pub mod geometry;
 pub mod rasterizer;

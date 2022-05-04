@@ -1,3 +1,5 @@
+use crate::float::Float;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct V2f {
     pub x: f32,
@@ -20,7 +22,7 @@ impl Into<(f32, f32)> for V2f {
     }
 }
 
-impl std::ops::Neg for V2f {
+impl core::ops::Neg for V2f {
     type Output = V2f;
 
     fn neg(self) -> V2f {
@@ -31,7 +33,7 @@ impl std::ops::Neg for V2f {
     }
 }
 
-impl std::ops::Add for V2f {
+impl core::ops::Add for V2f {
     type Output = V2f;
 
     fn add(self, other: V2f) -> V2f {
@@ -42,7 +44,7 @@ impl std::ops::Add for V2f {
     }
 }
 
-impl std::ops::Sub for V2f {
+impl core::ops::Sub for V2f {
     type Output = V2f;
 
     fn sub(self, other: V2f) -> V2f {
@@ -53,7 +55,7 @@ impl std::ops::Sub for V2f {
     }
 }
 
-impl std::ops::Mul<V2f> for V2f {
+impl core::ops::Mul<V2f> for V2f {
     type Output = V2f;
 
     fn mul(self, other: V2f) -> V2f {
@@ -64,7 +66,7 @@ impl std::ops::Mul<V2f> for V2f {
     }
 }
 
-impl std::ops::Div<V2f> for V2f {
+impl core::ops::Div<V2f> for V2f {
     type Output = V2f;
 
     fn div(self, other: V2f) -> V2f {
@@ -75,7 +77,7 @@ impl std::ops::Div<V2f> for V2f {
     }
 }
 
-impl std::ops::Mul<V2f> for f32 {
+impl core::ops::Mul<V2f> for f32 {
     type Output = V2f;
 
     fn mul(self, vec: V2f) -> V2f {
@@ -86,7 +88,7 @@ impl std::ops::Mul<V2f> for f32 {
     }
 }
 
-impl std::ops::Div<f32> for V2f {
+impl core::ops::Div<f32> for V2f {
     type Output = V2f;
 
     fn div(self, scalar: f32) -> V2f {
@@ -345,7 +347,7 @@ impl Cubic {
         else {
             // solve t^3 * sqrt(err_sq) = sqrt(tolerance_squared)
             //       t^5 = tolerance_squared / err_sq
-            let split = (tolerance_squared / err_sq).powf(1.0/5.0);
+            let split = (tolerance_squared / err_sq).pow(1.0/5.0);
 
             if split < 0.5 {
                 // we can use symmetry to split twice!

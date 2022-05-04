@@ -1,14 +1,39 @@
-#[inline(always)]
-pub fn safe_div(num: f32, denom: f32, default: f32) -> f32 {
-    if denom != 0.0 {
-        num / denom
-    }
-    else {
-        default
-    }
+pub trait Float {
+    fn copysign(self, other: Self) -> Self;
+
+    fn abs(self) -> Self;
+    fn floor(self) -> Self;
+    fn ceil(self) -> Self;
+
+    fn safe_div(self, denom: Self, default: Self) -> Self;
+
+    fn squared(self) -> Self;
+    fn sqrt(self) -> Self;
+
+    fn pow(self, n: Self) -> Self;
 }
 
-#[inline(always)]
-pub fn squared(v: f32) -> f32 {
-    v*v
+impl Float for f32 {
+    fn copysign(self, other: f32) -> f32 {
+        libm::copysignf(self, other)
+    }
+
+    fn abs(self) -> f32 { libm::fabsf(self) }
+    fn floor(self) -> f32 { libm::floorf(self) }
+    fn ceil(self) -> f32 { libm::ceilf(self) }
+
+    fn safe_div(self, denom: f32, default: f32) -> f32 {
+        if denom != 0.0 {
+            self / denom
+        }
+        else {
+            default
+        }
+    }
+
+    fn squared(self: f32) -> f32 { self*self }
+    fn sqrt(self) -> f32 { libm::sqrtf(self) }
+
+    fn pow(self, n: f32) -> f32 { libm::powf(self, n) }
 }
+
