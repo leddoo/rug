@@ -3,7 +3,7 @@ use alloc::alloc::*;
 
 use crate::float::Float;
 use crate::geometry::*;
-use crate::image::*;
+use crate::image::{ImageFormat, Image};
 
 
 // these are absolute and in pixel space.
@@ -13,7 +13,7 @@ pub const FLATTEN_RECURSION: u32 = 16;
 
 
 pub struct Rasterizer<A: Allocator = Global> {
-    deltas: ImageF32<1, A>,
+    deltas: Image<A>,
     pub flatten_tolerance: f32,
     pub flatten_recursion: u32,
 }
@@ -28,7 +28,7 @@ impl Rasterizer {
 impl<A: Allocator> Rasterizer<A> {
     pub fn new_in(width: u32, height: u32, allocator: A) -> Rasterizer<A> {
         Rasterizer {
-            deltas: ImageF32::new_in(width + 1, height + 1, allocator),
+            deltas: Image::new_in(ImageFormat::a_f32, width + 1, height + 1, allocator),
             flatten_tolerance: FLATTEN_TOLERANCE,
             flatten_recursion: FLATTEN_RECURSION,
         }
@@ -37,46 +37,47 @@ impl<A: Allocator> Rasterizer<A> {
     pub fn width(&self)  -> u32 { self.deltas.width() - 1 }
     pub fn height(&self) -> u32 { self.deltas.height() - 1 }
 
-    pub fn accumulate(self) -> ImageF32<1, A> {
-        let w = self.width();
-        let h = self.height();
+    pub fn accumulate(self) -> Image<A> {
+        let w = self.width() as usize;
+        let h = self.height() as usize;
 
         let mut deltas = self.deltas;
-        let stride = deltas.stride();
+        let stride = deltas.stride::<f32>();
 
         for y in 0..h {
             let mut a = 0.0;
             for x in 0..w {
-                a += deltas.raw_index(y*stride + x);
-                *deltas.raw_index_mut(y*stride + x) = a.abs().min(1.0);
+                a += deltas.read_aligned::<f32>(y*stride + x);
+                deltas.write_aligned(y*stride + x, a.abs().min(1.0));
             }
         }
 
-        deltas.truncate(w, h);
+        deltas.truncate(w as u32, h as u32);
         deltas
     }
 
 
     fn add_delta(&mut self, row_base: u32, x_i: f32, x0: f32, y0: f32, x1: f32, y1: f32) {
+        let row_base = row_base as usize;
         let delta = y1 - y0;
 
         if x_i < 0.0 {
-            *self.deltas.raw_index_mut(row_base) += delta;
+            *self.deltas.ref_mut_aligned::<f32>(row_base) += delta;
         }
         else if x_i < self.width() as f32 {
             let x_mid = (x0 + x1) / 2.0 - x_i;
             let delta_right = delta * x_mid;
-            debug_assert!(x_mid >= 0.0 && x_mid <= 1.0);
+            debug_assert!(x_mid >= 0.0 - ZERO_TOLERANCE && x_mid <= 1.0 + ZERO_TOLERANCE);
 
-            let x = x_i as u32;
-            *self.deltas.raw_index_mut(row_base + x + 0) += delta - delta_right;
-            *self.deltas.raw_index_mut(row_base + x + 1) += delta_right;
+            let x = x_i as usize;
+            *self.deltas.ref_mut_aligned::<f32>(row_base + x + 0) += delta - delta_right;
+            *self.deltas.ref_mut_aligned::<f32>(row_base + x + 1) += delta_right;
         }
     }
 
 
     pub fn add_segment_p(&mut self, p0: V2f, p1: V2f) {
-        let stride = self.deltas.stride() as f32;
+        let stride = self.deltas.stride::<f32>() as f32;
         let height = self.height() as f32;
 
         let dx_over_dy = (p1.x - p0.x).safe_div(p1.y - p0.y, 0.0);

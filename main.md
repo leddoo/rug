@@ -1,17 +1,13 @@
 todo:
-- simd:
-    - figure out how to do crate features.
-    - image.
-    - accumulate.
+- pipeline getting started:
+    - alpha blend function.
+    - hardcoded pipeline for: zrgb_u32.
 
 stuff:
-- image composition:
-    - copy.
-    - alpha blending.
-    - masks.
-    - gamma stuff.
-    - scale copy with bilinear blend.
-- paths.
+- static assert sizes & alignments.
+- paths & shapes.
+- shaders.
+- command buffer.
 - text.
 
 
