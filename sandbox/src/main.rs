@@ -35,6 +35,10 @@ fn main() {
 
     let face = ttf_parser::Face::from_slice(&bytes[..], 0).unwrap();
 
+    while 0==1 {
+        render(&face, 800, 600);
+    }
+
 
     let mut buffer_width  = 0;
     let mut buffer_height = 0;
@@ -82,7 +86,7 @@ fn render(face: &ttf_parser::Face, w: u32, h: u32) -> Vec<u32> {
     let columns = w / cell_size;
     
 
-    let mut image = Image::new(ImageFormat::zrgb_u32, w, h);
+    let mut image = Image::new(ImageFormat::argb_u32, w, h);
 
     let mut p = Pipeline::new(image.img_mut());
 
@@ -114,14 +118,18 @@ fn render(face: &ttf_parser::Face, w: u32, h: u32) -> Vec<u32> {
 
     let mut buffer = vec![];
     for y in 0..h as usize {
-        for x in 0..w as usize {
-            // TODO: unpack & .powf(1.0/2.2)
-            buffer.push(image.read_aligned::<u32>(y*image.stride::<u32>() + x));
-        }
+        let y = (h - 1) as usize - y;
+
+        // TODO: gamma correct.
+
+        let begin = y*image.stride::<u32>();
+        let end = begin + w as usize;
+        buffer.extend(image.slice(begin, end));
     }
 
     let count = (row * columns) as u32;
 
+if 1 == 1 {
     let dt = t0.elapsed();
     println!("done.");
     println!("  rendered {} glyphs in {:.2?}", count, dt);
@@ -130,6 +138,7 @@ fn render(face: &ttf_parser::Face, w: u32, h: u32) -> Vec<u32> {
     println!("  window size: {}", w*h);
     println!("  time per cell: {:.2?}", dt / count);
     println!("  time per pixel: {:.2?}", dt / count / (cell_size * cell_size));
+}
 
     buffer
 }

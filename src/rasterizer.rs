@@ -42,13 +42,13 @@ impl<A: Allocator> Rasterizer<A> {
         let h = self.height() as usize;
 
         let mut deltas = self.deltas;
-        let stride = deltas.stride::<f32>();
 
         for y in 0..h {
-            let mut a = 0.0;
+            let mut c = 0.0;
             for x in 0..w {
-                a += deltas.read_aligned::<f32>(y*stride + x);
-                deltas.write_aligned(y*stride + x, a.abs().min(1.0));
+                let delta = deltas.ref_mut_xy::<f32>(x, y);
+                c += *delta;
+                *delta = c.abs().min(1.0);
             }
         }
 
@@ -62,7 +62,7 @@ impl<A: Allocator> Rasterizer<A> {
         let delta = y1 - y0;
 
         if x_i < 0.0 {
-            *self.deltas.ref_mut_aligned::<f32>(row_base) += delta;
+            *self.deltas.ref_mut::<f32>(row_base) += delta;
         }
         else if x_i < self.width() as f32 {
             let x_mid = (x0 + x1) / 2.0 - x_i;
@@ -70,8 +70,8 @@ impl<A: Allocator> Rasterizer<A> {
             debug_assert!(x_mid >= 0.0 - ZERO_TOLERANCE && x_mid <= 1.0 + ZERO_TOLERANCE);
 
             let x = x_i as usize;
-            *self.deltas.ref_mut_aligned::<f32>(row_base + x + 0) += delta - delta_right;
-            *self.deltas.ref_mut_aligned::<f32>(row_base + x + 1) += delta_right;
+            *self.deltas.ref_mut::<f32>(row_base + x + 0) += delta - delta_right;
+            *self.deltas.ref_mut::<f32>(row_base + x + 1) += delta_right;
         }
     }
 

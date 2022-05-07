@@ -1,10 +1,20 @@
 todo:
-- pipeline getting started:
-    - alpha blend function.
-    - hardcoded pipeline for: zrgb_u32.
+- rethink images:
+    - image format isn't mutable.
+    - alignment & padding should be format specific.
+    - read/write will become unsafe?
+    - maybe instead actually have different types.
+        - ~ immutable format.
+        - can still use macros to reduce code duplication.
+            - code size doesn't apply, all those functions are `inline` anyway.
 
 stuff:
 - static assert sizes & alignments.
+- optimized out-of-bounds rasterization:
+    - skip non-left curves.
+    - approximate monotonic parts as segments.
+    - project segments onto left edge.
+    - simple fill loop.
 - paths & shapes.
 - shaders.
 - command buffer.
