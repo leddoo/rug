@@ -86,9 +86,7 @@ fn render(face: &ttf_parser::Face, w: u32, h: u32) -> Vec<u32> {
     let columns = w / cell_size;
     
 
-    let mut image = Image::new(ImageFormat::argb_u32, w, h);
-
-    let mut p = Pipeline::new(image.img_mut());
+    let mut image = Target::new(w, h);
 
     let mut row = 0;
     let mut column = 0;
@@ -103,7 +101,7 @@ fn render(face: &ttf_parser::Face, w: u32, h: u32) -> Vec<u32> {
         );
 
         let offset = U32x2::from([column, row]) * U32x2::splat(cell_size);
-        p.fill_mask(offset, r.accumulate().img());
+        fill_mask(&mut image, offset, &r.accumulate());
 
         column += 1;
         if column == columns {
@@ -117,14 +115,24 @@ fn render(face: &ttf_parser::Face, w: u32, h: u32) -> Vec<u32> {
     }
 
     let mut buffer = vec![];
+    buffer.reserve((w*h) as usize);
     for y in 0..h as usize {
         let y = (h - 1) as usize - y;
 
         // TODO: gamma correct.
 
-        let begin = y*image.stride::<u32>();
-        let end = begin + w as usize;
-        buffer.extend(image.slice(begin, end));
+        for x in 0..(w / 8) as usize {
+            let rgba = image[(x, y)];
+            let argb = argb_u8x8_pack(rgba);
+            buffer.extend(argb.to_array());
+        }
+
+        let rem = (w % 8) as usize;
+        if rem > 0 {
+            let rgba = image[((w/8) as usize, y)];
+            let argb = argb_u8x8_pack(rgba);
+            buffer.extend(&argb.to_array()[0..rem]);
+        }
     }
 
     let count = (row * columns) as u32;
@@ -156,13 +164,13 @@ fn glyph_to_path(
         None => return,
     };
 
-    struct Builder<'r> {
+    struct Builder<'r, 'a> {
         s: f32,
-        r:  &'r mut Rasterizer,
+        r:  &'r mut Rasterizer<'a>,
         p0: V2f,
     }
 
-    impl ttf::OutlineBuilder for Builder<'_> {
+    impl ttf::OutlineBuilder for Builder<'_, '_> {
         fn move_to(&mut self, x: f32, y: f32) {
             self.p0 = self.s*v2f(x, y);
         }

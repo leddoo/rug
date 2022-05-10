@@ -3,7 +3,7 @@ use alloc::alloc::*;
 
 use crate::float::Float;
 use crate::geometry::*;
-use crate::image::{ImageFormat, Image};
+use crate::image::{Mask};
 
 
 // these are absolute and in pixel space.
@@ -12,23 +12,21 @@ pub const FLATTEN_TOLERANCE: f32 = 0.1;
 pub const FLATTEN_RECURSION: u32 = 16;
 
 
-pub struct Rasterizer<A: Allocator = Global> {
-    deltas: Image<A>,
+pub struct Rasterizer<'a> {
+    pub deltas: Mask<'a>,
     pub flatten_tolerance: f32,
     pub flatten_recursion: u32,
 }
 
 
-impl Rasterizer {
-    pub fn new(width: u32, height: u32) -> Rasterizer {
-        Rasterizer::new_in(width, height, Global)
+impl<'a> Rasterizer<'a> {
+    pub fn new(width: u32, height: u32) -> Rasterizer<'a> {
+        Rasterizer::new_in(width, height, &Global)
     }
-}
 
-impl<A: Allocator> Rasterizer<A> {
-    pub fn new_in(width: u32, height: u32, allocator: A) -> Rasterizer<A> {
+    pub fn new_in(width: u32, height: u32, allocator: &'a dyn Allocator) -> Rasterizer<'a> {
         Rasterizer {
-            deltas: Image::new_in(ImageFormat::a_f32, width + 1, height + 1, allocator),
+            deltas: Mask::new_in(width + 1, height + 1, allocator),
             flatten_tolerance: FLATTEN_TOLERANCE,
             flatten_recursion: FLATTEN_RECURSION,
         }
@@ -37,7 +35,7 @@ impl<A: Allocator> Rasterizer<A> {
     pub fn width(&self)  -> u32 { self.deltas.width() - 1 }
     pub fn height(&self) -> u32 { self.deltas.height() - 1 }
 
-    pub fn accumulate(self) -> Image<A> {
+    pub fn accumulate(self) -> Mask<'a> {
         let w = self.width() as usize;
         let h = self.height() as usize;
 
@@ -46,9 +44,8 @@ impl<A: Allocator> Rasterizer<A> {
         for y in 0..h {
             let mut c = 0.0;
             for x in 0..w {
-                let delta = deltas.ref_mut_xy::<f32>(x, y);
-                c += *delta;
-                *delta = c.abs().min(1.0);
+                c += deltas[(x, y)];
+                deltas[(x, y)] = c.abs().min(1.0);
             }
         }
 
@@ -62,7 +59,7 @@ impl<A: Allocator> Rasterizer<A> {
         let delta = y1 - y0;
 
         if x_i < 0.0 {
-            *self.deltas.ref_mut::<f32>(row_base) += delta;
+            self.deltas[row_base] += delta;
         }
         else if x_i < self.width() as f32 {
             let x_mid = (x0 + x1) / 2.0 - x_i;
@@ -70,14 +67,14 @@ impl<A: Allocator> Rasterizer<A> {
             debug_assert!(x_mid >= 0.0 - ZERO_TOLERANCE && x_mid <= 1.0 + ZERO_TOLERANCE);
 
             let x = x_i as usize;
-            *self.deltas.ref_mut::<f32>(row_base + x + 0) += delta - delta_right;
-            *self.deltas.ref_mut::<f32>(row_base + x + 1) += delta_right;
+            self.deltas[row_base + x + 0] += delta - delta_right;
+            self.deltas[row_base + x + 1] += delta_right;
         }
     }
 
 
     pub fn add_segment_p(&mut self, p0: V2f, p1: V2f) {
-        let stride = self.deltas.stride::<f32>() as f32;
+        let stride = self.deltas.stride() as f32;
         let height = self.height() as f32;
 
         let dx_over_dy = (p1.x - p0.x).safe_div(p1.y - p0.y, 0.0);

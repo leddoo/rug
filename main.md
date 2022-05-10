@@ -1,22 +1,23 @@
 todo:
-- rethink images:
-    - image format isn't mutable.
-    - alignment & padding should be format specific.
-    - read/write will become unsafe?
-    - maybe instead actually have different types.
-        - ~ immutable format.
-        - can still use macros to reduce code duplication.
-            - code size doesn't apply, all those functions are `inline` anyway.
+- paths.
+- tiger.svg
+- stroking & dashing.
+- paris.svg
+- tiling & threading.
+- more shaders.
+- drops.svg
+- dynamic pipeline.
+
 
 stuff:
+- use simd types instead of V2f.
 - static assert sizes & alignments.
 - optimized out-of-bounds rasterization:
     - skip non-left curves.
     - approximate monotonic parts as segments.
     - project segments onto left edge.
     - simple fill loop.
-- paths & shapes.
-- shaders.
+- pipeline: fill-rect.
 - command buffer.
 - text.
 
