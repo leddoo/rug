@@ -3,40 +3,20 @@
 use rug::*;
 
 fn main() {
-    /*
-    let mut r = Rasterizer::new(WIDTH, HEIGHT);
-    r.add_segment_p(v2f(5.5, 0.5), v2f(24.0, 11.0));
-    r.add_segment_p(v2f(24.0, 11.0), v2f(15.0, 2.0));
-    r.add_segment_p(v2f(15.0, 2.0), v2f(5.5, 0.5));
-
-    r.add_segment_p(v2f(-5.0, -5.0), v2f(5.0, 12.0));
-    r.add_segment_p(v2f(5.0, 12.0), v2f(3.0, -5.0));
-
-    r.add_segment_p(v2f(8.0, 5.5), v2f(8.0, 10.0));
-    r.add_segment_p(v2f(9.5, 10.0), v2f(9.5, 5.5));
-
-
-    let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
-
-    for y in 0..r.height {
-        let mut a = 0.0;
-        for x in 0..r.width {
-            a += r.deltas[y*r.stride + x];
-            let a = a.abs().min(1.0);
-            buffer[(HEIGHT - 1 - y)*WIDTH + x] = (a.powf(1.0/2.2) * 255.0) as u32;
-            print!("{:.2} ", a);
-        }
-        println!();
-    }
-    println!();
-    */
-
     let bytes = include_bytes!(r"C:\Windows\Fonts\DejaVuSansMono.ttf");
-
     let face = ttf_parser::Face::from_slice(&bytes[..], 0).unwrap();
 
+    let svg = {
+        //let file = include_bytes!(r"D:\dev\vg-inputs\svg\tiger.svg");
+        let file = include_bytes!(r"D:\dev\vg-inputs\svg\paris-30k.svg");
+        let string = core::str::from_utf8(file).unwrap();
+        roxmltree::Document::parse(string).unwrap()
+    };
+
+
     while 0==1 {
-        render(&face, 800, 600);
+        //render(&face, 800, 600);
+        render_svg(&svg, 500 as u32, 500 as u32);
     }
 
 
@@ -60,7 +40,9 @@ fn main() {
         if w != buffer_width || h != buffer_height {
             buffer_width  = w;
             buffer_height = h;
-            buffer = render(&face, w as u32, h as u32);
+            //buffer = render(&face, w as u32, h as u32);
+            buffer = render_svg(&svg, w as u32, h as u32);
+            //buffer = render_debug(w as u32, h as u32);
         }
 
         window.update_with_buffer(&buffer, buffer_width, buffer_height).unwrap();
@@ -101,7 +83,7 @@ fn render(face: &ttf_parser::Face, w: u32, h: u32) -> Vec<u32> {
         );
 
         let offset = U32x2::from([column, row]) * U32x2::splat(cell_size);
-        fill_mask(&mut image, offset, &r.accumulate());
+        fill_mask(&mut image, offset, &r.accumulate(), F32x4::splat(1.0));
 
         column += 1;
         if column == columns {
@@ -114,26 +96,7 @@ fn render(face: &ttf_parser::Face, w: u32, h: u32) -> Vec<u32> {
         }
     }
 
-    let mut buffer = vec![];
-    buffer.reserve((w*h) as usize);
-    for y in 0..h as usize {
-        let y = (h - 1) as usize - y;
-
-        // TODO: gamma correct.
-
-        for x in 0..(w / 8) as usize {
-            let rgba = image[(x, y)];
-            let argb = argb_u8x8_pack(rgba);
-            buffer.extend(argb.to_array());
-        }
-
-        let rem = (w % 8) as usize;
-        if rem > 0 {
-            let rgba = image[((w/8) as usize, y)];
-            let argb = argb_u8x8_pack(rgba);
-            buffer.extend(&argb.to_array()[0..rem]);
-        }
-    }
+    let buffer = target_to_argb(image);
 
     let count = (row * columns) as u32;
 
@@ -199,4 +162,258 @@ fn glyph_to_path(
         fn close(&mut self) {
         }
     }
+}
+
+fn target_to_argb(target: Target) -> Vec<u32> {
+    let w = target.width();
+    let h = target.height();
+
+    let mut buffer = vec![];
+    buffer.reserve((w*h) as usize);
+
+    for y in 0..h as usize {
+        let y = (h - 1) as usize - y;
+
+        // TODO: gamma correct.
+
+        for x in 0..(w / 8) as usize {
+            let rgba = target[(x, y)];
+            let argb = argb_u8x8_pack(rgba);
+            buffer.extend(argb.to_array());
+        }
+
+        let rem = (w % 8) as usize;
+        if rem > 0 {
+            let rgba = target[((w/8) as usize, y)];
+            let argb = argb_u8x8_pack(rgba);
+            buffer.extend(&argb.to_array()[0..rem]);
+        }
+    }
+
+    buffer
+}
+
+
+fn render_svg(xml: &roxmltree::Document, w: u32, h: u32) -> Vec<u32> {
+    let root = xml.root();
+
+    let svg = root.children().next().unwrap();
+
+    let mut image = Target::new(w, h);
+    image.clear(F32x4::from([0.0, 0.0, 0.0, 1.0]));
+
+    let mut paths = 0;
+
+    let t0 = std::time::Instant::now();
+    for child in svg.children() {
+        render(&mut image, child, &mut paths);
+    }
+    let dt = t0.elapsed();
+    let dt_path = dt.as_secs_f32() * 1000.0 * 1000.0 / paths as f32;
+    let pixels = (w*h) as f32 * paths as f32;
+    let dt_pix = dt.as_secs_f32() * 1000.0 * 1000.0 * 1000.0 / pixels as f32;
+    let size = (image.stride() * h as usize) * core::mem::size_of::<[F32x8; 4]>();
+
+    if 1==1 {
+        println!("{} kiB", size / 1024);
+        println!("{} paths in {:.2?}", paths, dt);
+        println!("{:.2?}us per path", dt_path);
+        println!("{:.2?}ns per pixel", dt_pix);
+    }
+
+
+    fn render(target: &mut Target, node: roxmltree::Node, paths: &mut usize) -> Option<()> {
+        if !node.is_element() {
+            return None;
+        }
+
+        let tag_name = node.tag_name();
+
+        match tag_name.name() {
+            "g" => {
+                for child in node.children() {
+                    render(target, child, paths);
+                }
+            },
+
+            "defs" => {
+                // todo.
+            },
+
+            "path" => {
+                let [w, h] = *target.bounds().as_array();
+                let mut r = Rasterizer::new(w, h);
+
+                use core::str::FromStr;
+
+                let fill = node.attribute("fill")?;
+                let color = svgtypes::Color::from_str(fill).ok()?;
+
+                use svgtypes::PathSegment::*;
+
+                let mut p0 = v2f(0.0, 0.0);
+
+                let mut initial = None;
+
+                fn to_v2f(x: f64, y: f64) -> V2f {
+                    v2f(x as f32, y as f32)
+                }
+
+                for curve in svgtypes::PathParser::from(node.attribute("d").unwrap()) {
+                    match curve.unwrap() {
+                        MoveTo { abs, x, y } => {
+                            assert!(abs);
+                            p0 = to_v2f(x, y);
+
+                            if initial.is_none() {
+                                initial = Some(p0);
+                            }
+                        },
+
+                        LineTo { abs, x: x1, y: y1 } => {
+                            assert!(abs);
+                            let p1 = to_v2f(x1, y1);
+
+                            r.add_segment_p(p0, p1);
+                            p0 = p1;
+                        },
+
+                        Quadratic { abs, x1, y1, x: x2, y: y2 } => {
+                            assert!(abs);
+                            let p1 = to_v2f(x1, y1);
+                            let p2 = to_v2f(x2, y2);
+
+                            r.add_quadratic_p(p0, p1, p2);
+                            p0 = p2;
+                        },
+
+                        CurveTo { abs, x1, y1, x2, y2, x: x3, y: y3 } => {
+                            assert!(abs);
+                            let p1 = to_v2f(x1, y1);
+                            let p2 = to_v2f(x2, y2);
+                            let p3 = to_v2f(x3, y3);
+
+                            r.add_cubic_p(p0, p1, p2, p3);
+                            p0 = p3;
+                        },
+
+                        ClosePath { abs } => {
+                            assert!(abs);
+                            let p1 = initial.unwrap_or(v2f(0.0, 0.0));
+                            initial = None;
+
+                            r.add_segment_p(p0, p1);
+                            p0 = p1;
+                        },
+
+                        _ => {
+                            println!("unknown curve type");
+                            return None;
+                        },
+                    }
+                }
+
+                *paths += 1;
+
+                let a = color.alpha as f32 / 255.0;
+                let color = F32x4::from([
+                    color.red   as f32 / 255.0 * a,
+                    color.green as f32 / 255.0 * a,
+                    color.blue  as f32 / 255.0 * a,
+                    a,
+                ]);
+                fill_mask(target, U32x2::from([0, 0]), &r.accumulate(), color);
+            },
+
+            _ => {
+                println!("unknown tag: {}", tag_name.name());
+            },
+        }
+
+        Some(())
+    }
+
+    target_to_argb(image)
+}
+
+fn render_debug(w: u32, h: u32) -> Vec<u32> {
+    let mut image = Target::new(w, h);
+
+    image.clear(F32x4::splat(1.0));
+
+    let mut r = Rasterizer::new(w, h);
+
+
+    use svgtypes::PathSegment::*;
+
+    let mut p0 = v2f(0.0, 0.0);
+
+    let mut initial = None;
+
+    fn to_v2f(x: f64, y: f64) -> V2f {
+        //v2f(x as f32 - 116.0, y as f32 - 139.0)
+        v2f(x as f32, y as f32)
+    }
+
+    //let d = "M 142.632,157.137 C 142.632,157.137 141.098,157.137 137.262,155.219 135.344,155.219 124.603,151.766 119.232,142.176 119.232,142.176 131.124,151.383 142.632,157.137 ";
+    //let d = "M 85.405,13.0275 L 86.5375,14.4675 88.0075,16.3375 90.3175,19.2925 91.7237,21.06 92.1338,20.7325 93.4663,19.6975 94.2088,19.1163 94.37,17.9975 93.6087,16.9625 89.56,11.485 88.77,10.42 86.4212,12.2363 85.405,13.0275 85.405,13.0275 Z ";
+    let d = "M 86.69,19.4137 L 88.0375,21.1625 88.3887,21.6213 89.375,22.8763 90.5175,21.9925 91.7237,21.06 90.3175,19.2925 89.78,19.6975 89.3262,19.1313 88.3937,19.8488 87.5287,18.735 86.69,19.4138 86.69,19.4137 Z M 88.3987,20.8737 L 88.6862,20.65 89.0287,21.1037 88.955,21.1675 88.8325,21.0063 88.6188,21.1625 88.3988,20.8737 88.3987,20.8737 Z ";
+
+    for curve in svgtypes::PathParser::from(d) {
+        match curve.unwrap() {
+            MoveTo { abs, x, y } => {
+                assert!(abs);
+                p0 = to_v2f(x, y);
+
+                if initial.is_none() {
+                    initial = Some(p0);
+                }
+            },
+
+            LineTo { abs, x: x1, y: y1 } => {
+                assert!(abs);
+                let p1 = to_v2f(x1, y1);
+
+                r.add_segment_p(p0, p1);
+                p0 = p1;
+            },
+
+            Quadratic { abs, x1, y1, x: x2, y: y2 } => {
+                assert!(abs);
+                let p1 = to_v2f(x1, y1);
+                let p2 = to_v2f(x2, y2);
+
+                r.add_quadratic_p(p0, p1, p2);
+                p0 = p2;
+            },
+
+            CurveTo { abs, x1, y1, x2, y2, x: x3, y: y3 } => {
+                assert!(abs);
+                let p1 = to_v2f(x1, y1);
+                let p2 = to_v2f(x2, y2);
+                let p3 = to_v2f(x3, y3);
+
+                r.add_cubic_p(p0, p1, p2, p3);
+                p0 = p3;
+            },
+
+            ClosePath { abs } => {
+                assert!(abs);
+                let p1 = initial.unwrap_or(v2f(0.0, 0.0));
+                initial = None;
+
+                r.add_segment_p(p0, p1);
+                p0 = p1;
+            },
+
+            _ => {
+                unreachable!()
+            },
+        }
+    }
+
+    let color = F32x4::from([1.0, 0.0, 1.0, 1.0]);
+    fill_mask(&mut image, U32x2::from([0, 0]), &r.accumulate(), color);
+
+    target_to_argb(image)
 }

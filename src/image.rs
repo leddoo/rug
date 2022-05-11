@@ -159,6 +159,18 @@ impl<'a> Image_rgba_f32x8<'a> {
     }
 
     image_impl_bounds!();
+
+    pub fn clear(&mut self, color: F32x4) {
+        let r = F32x8::splat(color[0]);
+        let g = F32x8::splat(color[1]);
+        let b = F32x8::splat(color[2]);
+        let a = F32x8::splat(color[3]);
+
+        let value = (r, g, b, a);
+        for v in self.data.iter_mut() {
+            *v = value;
+        }
+    }
 }
 
 image_impl_index!(Image_rgba_f32x8, (F32x8, F32x8, F32x8, F32x8));
@@ -181,7 +193,7 @@ pub fn argb_u8x8_unpack(v: U32x8) -> (F32x8, F32x8, F32x8, F32x8) {
 }
 
 #[inline(always)]
-pub unsafe fn argb_u8x8_pack_clamped(v: (F32x8, F32x8, F32x8, F32x8)) -> U32x8 {
+pub unsafe fn argb_u8x8_pack_clamped_255(v: (F32x8, F32x8, F32x8, F32x8)) -> U32x8 {
     #[inline(always)]
     unsafe fn to_int(v: F32x8) -> U32x8 {
         core::mem::transmute(v.to_int_unchecked::<i32>())
@@ -189,23 +201,25 @@ pub unsafe fn argb_u8x8_pack_clamped(v: (F32x8, F32x8, F32x8, F32x8)) -> U32x8 {
 
     let (r, g, b, a) = v;
 
-    let scale = F32x8::splat(255.0);
-    let b = to_int(scale * b);
-    let g = to_int(scale * g) << U32x8::splat(8);
-    let r = to_int(scale * r) << U32x8::splat(16);
-    let a = to_int(scale * a) << U32x8::splat(24);
+    let b = to_int(b);
+    let g = to_int(g) << U32x8::splat(8);
+    let r = to_int(r) << U32x8::splat(16);
+    let a = to_int(a) << U32x8::splat(24);
     a | r | g | b
 }
 
 #[inline(always)]
 pub fn argb_u8x8_pack(v: (F32x8, F32x8, F32x8, F32x8)) -> U32x8 {
-    let zero = F32x8::splat(0.0);
-    let one  = F32x8::splat(1.0);
-    unsafe { argb_u8x8_pack_clamped((
-        v.0.clamp(zero, one),
-        v.1.clamp(zero, one),
-        v.2.clamp(zero, one),
-        v.3.clamp(zero, one),
+    let offset = F32x8::splat(0.5);
+    let scale = F32x8::splat(255.0);
+    let min = F32x8::splat(0.0);
+    let max = F32x8::splat(255.0);
+    let (r, g, b, a) = v;
+    unsafe { argb_u8x8_pack_clamped_255((
+        (scale*r + offset).clamp(min, max),
+        (scale*g + offset).clamp(min, max),
+        (scale*b + offset).clamp(min, max),
+        (scale*a + offset).clamp(min, max),
     )) }
 }
 

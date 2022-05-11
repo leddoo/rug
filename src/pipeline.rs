@@ -2,7 +2,7 @@ use crate::wide::*;
 use crate::image::*;
 
 
-pub fn fill_mask(target: &mut Target, offset: U32x2, mask: &Mask) {
+pub fn fill_mask(target: &mut Target, offset: U32x2, mask: &Mask, color: F32x4) {
     let bounds = target.bounds();
 
     if offset[0] >= bounds[0] || offset[1] >= bounds[1] {
@@ -46,25 +46,29 @@ pub fn fill_mask(target: &mut Target, offset: U32x2, mask: &Mask) {
 
             let (tr, tg, tb, ta) = target[p];
 
-            let (tr, tg, tb, ta) = run(tr, tg, tb, ta, coverage);
+            let (tr, tg, tb, ta) = run(tr, tg, tb, ta, coverage, color);
 
             target[p] = (tr, tg, tb, ta);
         }
     }
 }
 
-fn run(tr: F32x8, tg: F32x8, tb: F32x8, ta: F32x8, coverage: F32x8)
+fn run(tr: F32x8, tg: F32x8, tb: F32x8, ta: F32x8, coverage: F32x8, color: F32x4)
     -> (F32x8, F32x8, F32x8, F32x8)
 {
-    let color: F32x4 = [1.0, 1.0, 1.0, 1.0].into();
     let sr = F32x8::splat(color[0]);
     let sg = F32x8::splat(color[1]);
     let sb = F32x8::splat(color[2]);
     let sa = F32x8::splat(color[3]) * coverage;
 
-    if 0==1 {
-        return (sr*sa, sg*sa, sb*sa, sa);
+    /*
+    if color[3] == 1.0 && coverage.lanes_gt(F32x8::splat(1.0 - 1.0/255.0)).all() {
+        return (sr, sg, sb, F32x8::splat(1.0));
     }
+    else if coverage.lanes_lt(F32x8::splat(1.0/255.0)).all() {
+        return (tr, tg, tb, ta);
+    }
+    */
 
     let one = F32x8::splat(1.0);
     (
