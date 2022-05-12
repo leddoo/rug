@@ -1,6 +1,8 @@
 todo:
 - quality of life:
     - win32 window.
+        - send events to main thread.
+    - pan/zoom.
     - drag & drop.
     - simple benchmark:
         - render at different resolutions.
@@ -15,6 +17,7 @@ todo:
 
 
 stuff:
+- safer window abstraction.
 - use simd types instead of V2f.
 - static assert sizes & alignments.
 - simd-pre-process rasterizer.

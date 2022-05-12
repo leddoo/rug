@@ -1,15 +1,14 @@
 #![feature(portable_simd)]
 
+mod win32;
+
 use rug::*;
 
-struct Svg<'a> {
-    paths: Vec<(Path<'a>, F32x4)>,
+fn main() {
+    win32::run(program);
 }
 
-fn main() {
-    let bytes = include_bytes!(r"C:\Windows\Fonts\DejaVuSansMono.ttf");
-    let face = ttf_parser::Face::from_slice(&bytes[..], 0).unwrap();
-
+fn program() {
     let svg = {
         //let file = include_bytes!(r"D:\dev\vg-inputs\svg\tiger.svg");
         let file = include_bytes!(r"D:\dev\vg-inputs\svg\paris-30k.svg");
@@ -18,49 +17,36 @@ fn main() {
         //let file = include_bytes!(r"D:\dev\vg-inputs\svg\paper-1.svg");
         //let file = include_bytes!(r"D:\dev\vg-inputs\svg\embrace.svg");
         //let file = include_bytes!(r"D:\dev\vg-inputs\svg\reschart.svg");
-        let string = core::str::from_utf8(file).unwrap();
-        parse_xml(&roxmltree::Document::parse(string).unwrap())
+        parse_xml(core::str::from_utf8(file).unwrap())
     };
 
+    let window = win32::Window::new();
+    let mut old_size = (0, 0);
+    loop {
+        let size = window.size();
+        if size != old_size {
+            old_size = size;
 
-    while 0==1 {
-        //render(&face, 800, 600);
-        render_svg(&svg, 128 as u32, 128 as u32);
-    }
-
-
-    let mut buffer_width  = 0;
-    let mut buffer_height = 0;
-    let mut buffer = vec![];
-
-
-    let mut window = minifb::Window::new(
-        "window", 800, 600,
-        minifb::WindowOptions {
-            resize: true,
-            .. minifb::WindowOptions::default()
-        },
-    ).unwrap();
-
-    window.limit_update_rate(Some(std::time::Duration::from_micros(16667)));
-
-    while window.is_open() {
-        let (w, h) = window.get_size();
-        if w != buffer_width || h != buffer_height {
-            buffer_width  = w;
-            buffer_height = h;
-            //buffer = render(&face, w as u32, h as u32);
-            buffer = render_svg(&svg, w as u32, h as u32);
-            //buffer = render_debug(w as u32, h as u32);
+            let (w, h) = size;
+            let buffer = render_svg(&svg, w, h);
+            window.fill_pixels(&buffer, 0, 0, w, h);
         }
-
-        window.update_with_buffer(&buffer, buffer_width, buffer_height).unwrap();
+        else {
+            std::thread::sleep(std::time::Duration::from_millis(7));
+        }
     }
 }
 
 
+struct Svg<'a> {
+    paths: Vec<(Path<'a>, F32x4)>,
+}
+
+
+
 use ttf_parser as ttf;
 
+#[allow(dead_code)]
 #[inline(never)]
 fn render(face: &ttf_parser::Face, w: u32, h: u32) -> Vec<u32> {
 
@@ -109,7 +95,7 @@ fn render(face: &ttf_parser::Face, w: u32, h: u32) -> Vec<u32> {
 
     let count = (row * columns) as u32;
 
-if 1 == 1 {
+    if 1 == 1 {
     let dt = t0.elapsed();
     println!("done.");
     println!("  rendered {} glyphs in {:.2?}", count, dt);
@@ -118,11 +104,12 @@ if 1 == 1 {
     println!("  window size: {}", w*h);
     println!("  time per cell: {:.2?}", dt / count);
     println!("  time per pixel: {:.2?}", dt / count / (cell_size * cell_size));
-}
+    }
 
     buffer
 }
 
+#[allow(dead_code)]
 fn glyph_to_path(
     face: &ttf::Face,
     glyph_id: ttf::GlyphId,
@@ -203,9 +190,10 @@ fn target_to_argb(target: Target) -> Vec<u32> {
 }
 
 
-fn parse_xml(xml: &roxmltree::Document) -> Svg<'static> {
-    let root = xml.root();
+fn parse_xml(xml: &str) -> Svg<'static> {
+    let xml = roxmltree::Document::parse(xml).unwrap();
 
+    let root = xml.root();
     let svg = root.children().next().unwrap();
 
     let mut result = Svg { paths: vec![] };
@@ -312,6 +300,8 @@ fn parse_xml(xml: &roxmltree::Document) -> Svg<'static> {
     result
 }
 
+
+#[inline(never)]
 fn render_svg(svg: &Svg, w: u32, h: u32) -> Vec<u32> {
     let mut image = Target::new(w, h);
     image.clear(F32x4::from([0.0, 0.0, 0.0, 1.0]));
@@ -322,19 +312,26 @@ fn render_svg(svg: &Svg, w: u32, h: u32) -> Vec<u32> {
 
     let t0 = std::time::Instant::now();
 
-    for (path, color) in &svg.paths {
-        let image_aabb = rect(v2f(0.0, 0.0), v2f(image.width() as f32, image.height() as f32));
-        let mask_aabb  = path.aabb().clamp_to(image_aabb).round_inclusive_fast_non_neg();
+    let image_aabb = rect(v2f(0.0, 0.0), v2f(image.width() as f32, image.height() as f32));
 
-        let w = mask_aabb.width()  as u32;
-        let h = mask_aabb.height() as u32;
-        if w == 0 || h == 0 {
+    for (path, color) in &svg.paths {
+        let half_size = v2f(w as f32 / 2.0, h as f32 / 2.0);
+        let visible = path.aabb().grow(half_size).contains(half_size);
+        if !visible {
+            continue;
+        }
+
+        let mask_aabb = path.aabb().clamp_to(image_aabb).round_inclusive_fast();
+
+        let mask_w = mask_aabb.width()  as u32;
+        let mask_h = mask_aabb.height() as u32;
+        if mask_w == 0 || mask_h == 0 {
             continue;
         }
 
         let p0 = mask_aabb.min;
 
-        let mut r = Rasterizer::new(w, h);
+        let mut r = Rasterizer::new(mask_w, mask_h);
         path.iter(|curve| {
             use Curve::*;
             match curve {
@@ -345,7 +342,7 @@ fn render_svg(svg: &Svg, w: u32, h: u32) -> Vec<u32> {
         });
 
         paths += 1;
-        pixels += (w*h) as usize;
+        pixels += (mask_w*mask_h) as usize;
 
         fill_mask(&mut image, U32x2::from([p0.x as u32, p0.y as u32]), &r.accumulate(), *color);
     }
@@ -367,6 +364,8 @@ fn render_svg(svg: &Svg, w: u32, h: u32) -> Vec<u32> {
     target_to_argb(image)
 }
 
+
+#[allow(dead_code)]
 fn render_debug(w: u32, h: u32) -> Vec<u32> {
     let mut image = Target::new(w, h);
 

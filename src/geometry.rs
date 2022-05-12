@@ -154,6 +154,17 @@ impl Rect {
     }
 
     #[inline(always)]
+    pub fn contains(&mut self, p: V2f) -> bool {
+           p.x >= self.min.x && p.x < self.max.x
+        && p.y >= self.min.y && p.y < self.max.y
+    }
+
+    #[inline(always)]
+    pub fn grow(self, delta: V2f) -> Rect {
+        rect(self.min - delta, self.max + delta)
+    }
+
+    #[inline(always)]
     pub fn clamp_to(self, other: Rect) -> Rect {
         rect(
             self.min.clamp(other.min, other.max),
@@ -162,10 +173,10 @@ impl Rect {
     }
 
     #[inline(always)]
-    pub fn round_inclusive_fast_non_neg(self) -> Rect {
+    pub fn round_inclusive_fast(self) -> Rect {
         rect(
-            v2f(floor_fast_non_neg(self.min.x), floor_fast_non_neg(self.min.y)),
-            v2f(ceil_fast_non_neg(self.max.x),  ceil_fast_non_neg(self.max.y)),
+            v2f(floor_fast(self.min.x), floor_fast(self.min.y)),
+            v2f(ceil_fast(self.max.x),  ceil_fast(self.max.y)),
         )
     }
 

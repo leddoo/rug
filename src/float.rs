@@ -39,23 +39,13 @@ impl Float for f32 {
 
 
 #[inline(always)]
-pub fn floor_fast_non_neg(a: f32) -> f32 {
-    unsafe { a.to_int_unchecked::<i32>() as f32 }
-}
-
-#[inline(always)]
-pub fn ceil_fast_non_neg(a: f32) -> f32 {
-    let one = f32::from_bits(1.0f32.to_bits() - 1);
-    unsafe { (a + one).to_int_unchecked::<i32>() as f32 }
-}
-
-#[inline(always)]
 pub fn floor_fast(a: f32) -> f32 {
-    if a >= 0.0 {
-        floor_fast_non_neg(a)
-    }
-    else {
-        -ceil_fast_non_neg(-a)
-    }
+    let i = unsafe { a.to_int_unchecked::<i32>() as f32 };
+    i - (a < i) as i32 as f32
 }
 
+#[inline(always)]
+pub fn ceil_fast(a: f32) -> f32 {
+    let i = unsafe { a.to_int_unchecked::<i32>() as f32 };
+    i + (a > i) as i32 as f32
+}
