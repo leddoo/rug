@@ -12,16 +12,20 @@ use windows::{
                 ExitProcess,
             },
         },
-        UI::WindowsAndMessaging::*,
+        UI::{
+            Input::KeyboardAndMouse::VIRTUAL_KEY,
+            WindowsAndMessaging::*,
+        },
     },
 };
+
+use std::sync::mpsc;
 
 
 pub fn run(main: fn()) {
     unsafe { _run(main) }
 }
 
-#[allow(dead_code)]
 pub fn exit() -> ! {
     unsafe { ExitProcess(0) }
 }
@@ -41,6 +45,40 @@ impl Window {
     pub fn fill_pixels(self, buffer: &[u32], x: i32, y: i32, w: u32, h: u32) {
         unsafe { _fill_pixels(self.0, buffer, x, y, w, h) }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Event {
+    Close (HWND),
+    MouseMove (HWND, u32, u32),
+    MouseDown (HWND, u32, u32, MouseButton),
+    MouseUp   (HWND, u32, u32, MouseButton),
+    KeyDown (HWND, VIRTUAL_KEY),
+    KeyUp   (HWND, VIRTUAL_KEY),
+    Char (HWND, u16),
+    Size (HWND, u32, u32),
+    Paint (HWND),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum MouseButton {
+    Left,
+    Right,
+    Middle,
+}
+
+
+pub fn peek_event() -> Option<Event> {
+    unsafe { _peek_event() }
+}
+
+#[allow(dead_code)]
+pub fn next_event() -> Event {
+    unsafe { _next_event() }
+}
+
+pub fn next_event_timeout(timeout: std::time::Duration) -> Option<Event> {
+    unsafe { _next_event_timeout(timeout) }
 }
 
 
@@ -103,6 +141,10 @@ unsafe fn _run(main: fn()) {
         ).unwrap();
     }
 
+    let (sender, receiver) = mpsc::channel();
+    EVENT_QUEUE_SENDER   = Some(sender);
+    EVENT_QUEUE_RECEIVER = Some(receiver);
+
     INITIALIZED = true;
 
     // event loop
@@ -128,6 +170,9 @@ const MSG_DESTROY_WINDOW: u32 = WM_USER + 69;
 static mut INITIALIZED: bool = false;
 static mut USER_THREAD_ID: u32 = 0;
 static mut MESSAGE_WINDOW: HWND = HWND(0);
+static mut EVENT_QUEUE_SENDER:   Option<mpsc::Sender<Event>> = None;
+static mut EVENT_QUEUE_RECEIVER: Option<mpsc::Receiver<Event>> = None;
+
 
 unsafe fn _create_window() -> HWND {
     assert!(INITIALIZED);
@@ -183,6 +228,33 @@ unsafe fn _fill_pixels(window: HWND, buffer: &[u32], x: i32, y: i32, w: u32, h: 
 }
 
 
+unsafe fn _peek_event() -> Option<Event> {
+    assert!(INITIALIZED);
+    let receiver = EVENT_QUEUE_RECEIVER.as_mut().unwrap();
+    match receiver.try_recv() {
+        Ok(event) => Some(event),
+        Err(mpsc::TryRecvError::Empty) => None,
+        _ => panic!(),
+    }
+}
+
+unsafe fn _next_event() -> Event {
+    assert!(INITIALIZED);
+    let receiver = EVENT_QUEUE_RECEIVER.as_mut().unwrap();
+    receiver.recv().unwrap()
+}
+
+unsafe fn _next_event_timeout(timeout: std::time::Duration) -> Option<Event> {
+    assert!(INITIALIZED);
+    let receiver = EVENT_QUEUE_RECEIVER.as_mut().unwrap();
+    match receiver.recv_timeout(timeout) {
+        Ok(event) => Some(event),
+        Err(mpsc::RecvTimeoutError::Timeout) => None,
+        _ => panic!(),
+    }
+}
+
+
 unsafe extern "system" fn msg_window_proc(window: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     match message as u32 {
         MSG_CREATE_WINDOW => {
@@ -212,13 +284,87 @@ unsafe extern "system" fn msg_window_proc(window: HWND, message: u32, wparam: WP
 }
 
 unsafe extern "system" fn user_window_proc(window: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    match message as u32 {
-        WM_PAINT => {
-            ValidateRect(window, std::ptr::null());
+    assert!(INITIALIZED);
+    let queue = EVENT_QUEUE_SENDER.as_mut().unwrap();
+
+    fn low_u16(a: isize) -> u32 {
+        (a as usize as u32) & 0xffff
+    }
+
+    fn high_u16(a: isize) -> u32 {
+        ((a as usize as u32) >> 16) & 0xffff
+    }
+
+    let message = message as u32;
+    match message {
+        WM_CLOSE => {
+            queue.send(Event::Close(window)).unwrap();
             LRESULT(0)
         },
 
-        WM_CLOSE => { LRESULT(0) },
+        WM_MOUSEMOVE => {
+            let x = low_u16(lparam.0);
+            let y = high_u16(lparam.0);
+            queue.send(Event::MouseMove(window, x, y)).unwrap();
+            LRESULT(0)
+        },
+
+        WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN => {
+            let x = low_u16(lparam.0);
+            let y = high_u16(lparam.0);
+            let button = match message {
+                WM_LBUTTONDOWN => MouseButton::Left,
+                WM_RBUTTONDOWN => MouseButton::Right,
+                WM_MBUTTONDOWN => MouseButton::Middle,
+                _ => unreachable!(),
+            };
+            queue.send(Event::MouseDown(window, x, y, button)).unwrap();
+            LRESULT(0)
+        },
+
+        WM_LBUTTONUP | WM_RBUTTONUP | WM_MBUTTONUP => {
+            let x = low_u16(lparam.0);
+            let y = high_u16(lparam.0);
+            let button = match message {
+                WM_LBUTTONUP => MouseButton::Left,
+                WM_RBUTTONUP => MouseButton::Right,
+                WM_MBUTTONUP => MouseButton::Middle,
+                _ => unreachable!(),
+            };
+            queue.send(Event::MouseUp(window, x, y, button)).unwrap();
+            LRESULT(0)
+        },
+
+        WM_KEYDOWN => {
+            let key = VIRTUAL_KEY(wparam.0 as usize as u16);
+            queue.send(Event::KeyDown(window, key)).unwrap();
+            LRESULT(0)
+        },
+
+        WM_KEYUP => {
+            let key = VIRTUAL_KEY(wparam.0 as usize as u16);
+            queue.send(Event::KeyUp(window, key)).unwrap();
+            LRESULT(0)
+        },
+
+        WM_CHAR => {
+            let chr = wparam.0 as usize as u16;
+            queue.send(Event::Char(window, chr)).unwrap();
+            LRESULT(0)
+        },
+
+        WM_SIZE => {
+            let w = low_u16(lparam.0);
+            let h = high_u16(lparam.0);
+            queue.send(Event::Size(window, w, h)).unwrap();
+            LRESULT(0)
+        },
+
+        WM_PAINT => {
+            queue.send(Event::Paint(window)).unwrap();
+            ValidateRect(window, std::ptr::null());
+            LRESULT(0)
+        },
 
         _ => DefWindowProcW(window, message, wparam, lparam),
     }

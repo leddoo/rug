@@ -23,6 +23,17 @@ fn program() {
     let window = win32::Window::new();
     let mut old_size = (0, 0);
     loop {
+        let mut event = win32::next_event_timeout(std::time::Duration::from_secs(2));
+        while let Some(e) = event {
+            use win32::Event::*;
+            match e {
+                Close (_) => { win32::exit(); },
+                Paint (_) => { old_size = (0, 0) },
+                _ => (),
+            }
+            event = win32::peek_event();
+        }
+
         let size = window.size();
         if size != old_size {
             old_size = size;

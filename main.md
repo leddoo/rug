@@ -1,7 +1,5 @@
 todo:
 - quality of life:
-    - win32 window.
-        - send events to main thread.
     - pan/zoom.
     - drag & drop.
     - simple benchmark:
