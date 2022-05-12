@@ -1,4 +1,4 @@
-use crate::float::Float;
+use crate::float::*;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct V2f {
@@ -115,6 +115,69 @@ impl V2f {
     pub fn lerp(self, other: Self, t: f32) -> V2f {
         (1.0 - t)*self + t*other
     }
+
+    pub fn min(self, other: V2f) -> V2f {
+        V2f {
+            x: self.x.min(other.x),
+            y: self.y.min(other.y),
+        }
+    }
+
+    pub fn max(self, other: V2f) -> V2f {
+        V2f {
+            x: self.x.max(other.x),
+            y: self.y.max(other.y),
+        }
+    }
+
+    pub fn clamp(self, low: V2f, high: V2f) -> V2f {
+        self.max(low).min(high)
+    }
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Rect {
+    pub min: V2f,
+    pub max: V2f,
+}
+
+pub fn rect(min: V2f, max: V2f) -> Rect {
+    Rect { min, max }
+}
+
+impl Rect {
+    #[inline(always)]
+    pub fn include(&mut self, p: V2f) {
+        self.min = self.min.min(p);
+        self.max = self.max.max(p);
+    }
+
+    #[inline(always)]
+    pub fn clamp_to(self, other: Rect) -> Rect {
+        rect(
+            self.min.clamp(other.min, other.max),
+            self.max.clamp(other.min, other.max),
+        )
+    }
+
+    #[inline(always)]
+    pub fn round_inclusive_fast_non_neg(self) -> Rect {
+        rect(
+            v2f(floor_fast_non_neg(self.min.x), floor_fast_non_neg(self.min.y)),
+            v2f(ceil_fast_non_neg(self.max.x),  ceil_fast_non_neg(self.max.y)),
+        )
+    }
+
+    #[inline(always)]
+    pub fn width(self) -> f32 {
+        self.max.x - self.min.x
+    }
+
+    #[inline(always)]
+    pub fn height(self) -> f32 {
+        self.max.y - self.min.y
+    }
 }
 
 
@@ -126,6 +189,17 @@ pub struct Segment {
 
 pub fn segment(p0: V2f, p1: V2f) -> Segment {
     Segment { p0, p1 }
+}
+
+impl core::ops::Add<V2f> for Segment {
+    type Output = Segment;
+
+    fn add(self, v: V2f) -> Segment {
+        segment(
+            self.p0 + v,
+            self.p1 + v,
+        )
+    }
 }
 
 
@@ -167,6 +241,18 @@ impl Quadratic {
             q1.flatten(f, tolerance_squared, max_recursion - 1);
             q2.flatten(f, tolerance_squared, max_recursion - 1);
         }
+    }
+}
+
+impl core::ops::Add<V2f> for Quadratic {
+    type Output = Quadratic;
+
+    fn add(self, v: V2f) -> Quadratic {
+        quadratic(
+            self.p0 + v,
+            self.p1 + v,
+            self.p2 + v,
+        )
     }
 }
 
@@ -391,5 +477,18 @@ impl Cubic {
         };
 
         self.reduce(&mut on_quad, tolerance_squared, max_recursion);
+    }
+}
+
+impl core::ops::Add<V2f> for Cubic {
+    type Output = Cubic;
+
+    fn add(self, v: V2f) -> Cubic {
+        cubic(
+            self.p0 + v,
+            self.p1 + v,
+            self.p2 + v,
+            self.p3 + v,
+        )
     }
 }

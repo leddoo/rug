@@ -1,7 +1,7 @@
 extern crate alloc;
 use alloc::alloc::*;
 
-use crate::float::Float;
+use crate::float::*;
 use crate::geometry::*;
 use crate::image::{Mask};
 
@@ -94,10 +94,10 @@ impl<'a> Rasterizer<'a> {
         let x_dt = dx_inv.abs();
         let y_dt = dy_inv.abs();
 
-        let x_i0 = x0.floor();
-        let y_i0 = y0.floor();
-        let x_i1 = x1.floor();
-        let y_i1 = y1.floor();
+        let x_i0 = floor_fast(x0);
+        let y_i0 = floor_fast(y0);
+        let x_i1 = floor_fast(x1);
+        let y_i1 = floor_fast(y1);
 
         let x_steps = (x_i1 - x_i0).abs() as u32;
         let y_steps = (y_i1 - y_i0).abs() as u32;

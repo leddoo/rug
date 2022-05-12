@@ -1,9 +1,14 @@
 todo:
-- paths.
-- tiger.svg
-- stroking & dashing.
-- paris.svg
-- tiling & threading.
+- quality of life:
+    - win32 window.
+    - drag & drop.
+    - simple benchmark:
+        - render at different resolutions.
+        - on press `b`.
+        - render returns stats instead of printing.
+- tiling.
+- stroking.
+- dashing.
 - more shaders.
 - drops.svg
 - dynamic pipeline.
@@ -12,6 +17,12 @@ todo:
 stuff:
 - use simd types instead of V2f.
 - static assert sizes & alignments.
+- simd-pre-process rasterizer.
+- perf:
+    - 4x2.
+    - floor/ceil: clamp first -> positive.
+        - can use unchecked cast for flooring.
+        - ceil: floor(x + (1 - 1ulp))
 - optimized out-of-bounds rasterization:
     - skip non-left curves.
     - approximate monotonic parts as segments.

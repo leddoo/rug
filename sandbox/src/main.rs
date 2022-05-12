@@ -2,6 +2,10 @@
 
 use rug::*;
 
+struct Svg<'a> {
+    paths: Vec<(Path<'a>, F32x4)>,
+}
+
 fn main() {
     let bytes = include_bytes!(r"C:\Windows\Fonts\DejaVuSansMono.ttf");
     let face = ttf_parser::Face::from_slice(&bytes[..], 0).unwrap();
@@ -9,14 +13,19 @@ fn main() {
     let svg = {
         //let file = include_bytes!(r"D:\dev\vg-inputs\svg\tiger.svg");
         let file = include_bytes!(r"D:\dev\vg-inputs\svg\paris-30k.svg");
+        //let file = include_bytes!(r"D:\dev\vg-inputs\svg\hawaii.svg");
+        //let file = include_bytes!(r"D:\dev\vg-inputs\svg\boston.svg");
+        //let file = include_bytes!(r"D:\dev\vg-inputs\svg\paper-1.svg");
+        //let file = include_bytes!(r"D:\dev\vg-inputs\svg\embrace.svg");
+        //let file = include_bytes!(r"D:\dev\vg-inputs\svg\reschart.svg");
         let string = core::str::from_utf8(file).unwrap();
-        roxmltree::Document::parse(string).unwrap()
+        parse_xml(&roxmltree::Document::parse(string).unwrap())
     };
 
 
     while 0==1 {
         //render(&face, 800, 600);
-        render_svg(&svg, 500 as u32, 500 as u32);
+        render_svg(&svg, 128 as u32, 128 as u32);
     }
 
 
@@ -194,35 +203,18 @@ fn target_to_argb(target: Target) -> Vec<u32> {
 }
 
 
-fn render_svg(xml: &roxmltree::Document, w: u32, h: u32) -> Vec<u32> {
+fn parse_xml(xml: &roxmltree::Document) -> Svg<'static> {
     let root = xml.root();
 
     let svg = root.children().next().unwrap();
 
-    let mut image = Target::new(w, h);
-    image.clear(F32x4::from([0.0, 0.0, 0.0, 1.0]));
+    let mut result = Svg { paths: vec![] };
 
-    let mut paths = 0;
-
-    let t0 = std::time::Instant::now();
     for child in svg.children() {
-        render(&mut image, child, &mut paths);
-    }
-    let dt = t0.elapsed();
-    let dt_path = dt.as_secs_f32() * 1000.0 * 1000.0 / paths as f32;
-    let pixels = (w*h) as f32 * paths as f32;
-    let dt_pix = dt.as_secs_f32() * 1000.0 * 1000.0 * 1000.0 / pixels as f32;
-    let size = (image.stride() * h as usize) * core::mem::size_of::<[F32x8; 4]>();
-
-    if 1==1 {
-        println!("{} kiB", size / 1024);
-        println!("{} paths in {:.2?}", paths, dt);
-        println!("{:.2?}us per path", dt_path);
-        println!("{:.2?}ns per pixel", dt_pix);
+        render(&mut result, child);
     }
 
-
-    fn render(target: &mut Target, node: roxmltree::Node, paths: &mut usize) -> Option<()> {
+    fn render(result: &mut Svg, node: roxmltree::Node) -> Option<()> {
         if !node.is_element() {
             return None;
         }
@@ -232,7 +224,7 @@ fn render_svg(xml: &roxmltree::Document, w: u32, h: u32) -> Vec<u32> {
         match tag_name.name() {
             "g" => {
                 for child in node.children() {
-                    render(target, child, paths);
+                    render(result, child);
                 }
             },
 
@@ -241,69 +233,51 @@ fn render_svg(xml: &roxmltree::Document, w: u32, h: u32) -> Vec<u32> {
             },
 
             "path" => {
-                let [w, h] = *target.bounds().as_array();
-                let mut r = Rasterizer::new(w, h);
-
                 use core::str::FromStr;
 
                 let fill = node.attribute("fill")?;
                 let color = svgtypes::Color::from_str(fill).ok()?;
 
+                let alpha =
+                    if node.has_attribute("fill-opacity") {
+                        svgtypes::Number::from_str(node.attribute("fill-opacity").unwrap()).unwrap().0 as f32
+                    }
+                    else {
+                        1.0
+                    };
+
                 use svgtypes::PathSegment::*;
-
-                let mut p0 = v2f(0.0, 0.0);
-
-                let mut initial = None;
 
                 fn to_v2f(x: f64, y: f64) -> V2f {
                     v2f(x as f32, y as f32)
                 }
 
+                let mut pb = PathBuilder::new();
                 for curve in svgtypes::PathParser::from(node.attribute("d").unwrap()) {
                     match curve.unwrap() {
                         MoveTo { abs, x, y } => {
                             assert!(abs);
-                            p0 = to_v2f(x, y);
-
-                            if initial.is_none() {
-                                initial = Some(p0);
-                            }
+                            pb.move_to(to_v2f(x, y));
                         },
 
                         LineTo { abs, x: x1, y: y1 } => {
                             assert!(abs);
-                            let p1 = to_v2f(x1, y1);
-
-                            r.add_segment_p(p0, p1);
-                            p0 = p1;
+                            pb.segment_to(to_v2f(x1, y1));
                         },
 
                         Quadratic { abs, x1, y1, x: x2, y: y2 } => {
                             assert!(abs);
-                            let p1 = to_v2f(x1, y1);
-                            let p2 = to_v2f(x2, y2);
-
-                            r.add_quadratic_p(p0, p1, p2);
-                            p0 = p2;
+                            pb.quadratic_to(to_v2f(x1, y1), to_v2f(x2, y2));
                         },
 
                         CurveTo { abs, x1, y1, x2, y2, x: x3, y: y3 } => {
                             assert!(abs);
-                            let p1 = to_v2f(x1, y1);
-                            let p2 = to_v2f(x2, y2);
-                            let p3 = to_v2f(x3, y3);
-
-                            r.add_cubic_p(p0, p1, p2, p3);
-                            p0 = p3;
+                            pb.cubic_to(to_v2f(x1, y1), to_v2f(x2, y2), to_v2f(x3, y3));
                         },
 
                         ClosePath { abs } => {
                             assert!(abs);
-                            let p1 = initial.unwrap_or(v2f(0.0, 0.0));
-                            initial = None;
-
-                            r.add_segment_p(p0, p1);
-                            p0 = p1;
+                            pb.close();
                         },
 
                         _ => {
@@ -313,16 +287,18 @@ fn render_svg(xml: &roxmltree::Document, w: u32, h: u32) -> Vec<u32> {
                     }
                 }
 
-                *paths += 1;
 
-                let a = color.alpha as f32 / 255.0;
+                let path = pb.build();
+
+                let a = alpha * (color.alpha as f32 / 255.0);
                 let color = F32x4::from([
-                    color.red   as f32 / 255.0 * a,
-                    color.green as f32 / 255.0 * a,
-                    color.blue  as f32 / 255.0 * a,
+                    color.red   as f32 / 255.0,
+                    color.green as f32 / 255.0,
+                    color.blue  as f32 / 255.0,
                     a,
                 ]);
-                fill_mask(target, U32x2::from([0, 0]), &r.accumulate(), color);
+
+                result.paths.push((path, color));
             },
 
             _ => {
@@ -332,6 +308,61 @@ fn render_svg(xml: &roxmltree::Document, w: u32, h: u32) -> Vec<u32> {
 
         Some(())
     }
+
+    result
+}
+
+fn render_svg(svg: &Svg, w: u32, h: u32) -> Vec<u32> {
+    let mut image = Target::new(w, h);
+    image.clear(F32x4::from([0.0, 0.0, 0.0, 1.0]));
+
+    let mut paths = 0;
+    let mut pixels = 0;
+
+
+    let t0 = std::time::Instant::now();
+
+    for (path, color) in &svg.paths {
+        let image_aabb = rect(v2f(0.0, 0.0), v2f(image.width() as f32, image.height() as f32));
+        let mask_aabb  = path.aabb().clamp_to(image_aabb).round_inclusive_fast_non_neg();
+
+        let w = mask_aabb.width()  as u32;
+        let h = mask_aabb.height() as u32;
+        if w == 0 || h == 0 {
+            continue;
+        }
+
+        let p0 = mask_aabb.min;
+
+        let mut r = Rasterizer::new(w, h);
+        path.iter(|curve| {
+            use Curve::*;
+            match curve {
+                Segment(segment)     => { r.add_segment(segment + -p0); },
+                Quadratic(quadratic) => { r.add_quadratic(quadratic + -p0); },
+                Cubic(cubic)         => { r.add_cubic(cubic + -p0); },
+            }
+        });
+
+        paths += 1;
+        pixels += (w*h) as usize;
+
+        fill_mask(&mut image, U32x2::from([p0.x as u32, p0.y as u32]), &r.accumulate(), *color);
+    }
+
+    let dt = t0.elapsed();
+    let dt_path = dt.as_secs_f32() * 1000.0 * 1000.0 / paths as f32;
+    let dt_pix = dt.as_secs_f32() * 1000.0 * 1000.0 * 1000.0 / pixels as f32;
+    let size = (image.stride() * h as usize) * core::mem::size_of::<[F32x8; 4]>();
+
+    if 1==1 {
+        println!("{} kiB", size / 1024);
+        println!("{} paths in {:.2?}", paths, dt);
+        println!("{:.2?}us per path", dt_path);
+        println!("{:.2?}ns per pixel", dt_pix);
+        println!("{} pixels per path", pixels / paths);
+    }
+
 
     target_to_argb(image)
 }
