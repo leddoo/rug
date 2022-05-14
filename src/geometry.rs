@@ -6,25 +6,15 @@ pub struct V2f {
     pub y: f32,
 }
 
+#[inline(always)]
 pub fn v2f(x: f32, y: f32) -> V2f {
     V2f { x, y }
-}
-
-impl From<(f32, f32)> for V2f {
-    fn from(v: (f32, f32)) -> V2f {
-        V2f { x: v.0, y: v.1 }
-    }
-}
-
-impl Into<(f32, f32)> for V2f {
-    fn into(self) -> (f32, f32) {
-        (self.x, self.y)
-    }
 }
 
 impl core::ops::Neg for V2f {
     type Output = V2f;
 
+    #[inline(always)]
     fn neg(self) -> V2f {
         V2f {
             x: -self.x,
@@ -36,6 +26,7 @@ impl core::ops::Neg for V2f {
 impl core::ops::Add for V2f {
     type Output = V2f;
 
+    #[inline(always)]
     fn add(self, other: V2f) -> V2f {
         V2f {
             x: self.x + other.x,
@@ -47,6 +38,7 @@ impl core::ops::Add for V2f {
 impl core::ops::Sub for V2f {
     type Output = V2f;
 
+    #[inline(always)]
     fn sub(self, other: V2f) -> V2f {
         V2f {
             x: self.x - other.x,
@@ -58,6 +50,7 @@ impl core::ops::Sub for V2f {
 impl core::ops::Mul<V2f> for V2f {
     type Output = V2f;
 
+    #[inline(always)]
     fn mul(self, other: V2f) -> V2f {
         V2f {
             x: self.x * other.x,
@@ -69,6 +62,7 @@ impl core::ops::Mul<V2f> for V2f {
 impl core::ops::Div<V2f> for V2f {
     type Output = V2f;
 
+    #[inline(always)]
     fn div(self, other: V2f) -> V2f {
         V2f {
             x: self.x / other.x,
@@ -80,6 +74,7 @@ impl core::ops::Div<V2f> for V2f {
 impl core::ops::Mul<V2f> for f32 {
     type Output = V2f;
 
+    #[inline(always)]
     fn mul(self, vec: V2f) -> V2f {
         V2f {
             x: self * vec.x,
@@ -91,6 +86,7 @@ impl core::ops::Mul<V2f> for f32 {
 impl core::ops::Div<f32> for V2f {
     type Output = V2f;
 
+    #[inline(always)]
     fn div(self, scalar: f32) -> V2f {
         V2f {
             x: self.x / scalar,
@@ -100,22 +96,27 @@ impl core::ops::Div<f32> for V2f {
 }
 
 impl V2f {
+    #[inline(always)]
     pub fn dot(self, other: V2f) -> f32 {
         (self.x * other.x) + (self.y * other.y)
     }
 
+    #[inline(always)]
     pub fn length_squared(self) -> f32 {
         self.dot(self)
     }
 
+    #[inline(always)]
     pub fn length(self) -> f32 {
         self.length_squared().sqrt()
     }
 
+    #[inline(always)]
     pub fn lerp(self, other: Self, t: f32) -> V2f {
         (1.0 - t)*self + t*other
     }
 
+    #[inline(always)]
     pub fn min(self, other: V2f) -> V2f {
         V2f {
             x: self.x.min(other.x),
@@ -123,6 +124,7 @@ impl V2f {
         }
     }
 
+    #[inline(always)]
     pub fn max(self, other: V2f) -> V2f {
         V2f {
             x: self.x.max(other.x),
@@ -130,6 +132,7 @@ impl V2f {
         }
     }
 
+    #[inline(always)]
     pub fn clamp(self, low: V2f, high: V2f) -> V2f {
         self.max(low).min(high)
     }
@@ -142,6 +145,7 @@ pub struct Rect {
     pub max: V2f,
 }
 
+#[inline(always)]
 pub fn rect(min: V2f, max: V2f) -> Rect {
     Rect { min, max }
 }
@@ -198,6 +202,7 @@ pub struct Segment {
     pub p1: V2f,
 }
 
+#[inline(always)]
 pub fn segment(p0: V2f, p1: V2f) -> Segment {
     Segment { p0, p1 }
 }
@@ -205,6 +210,7 @@ pub fn segment(p0: V2f, p1: V2f) -> Segment {
 impl core::ops::Add<V2f> for Segment {
     type Output = Segment;
 
+    #[inline(always)]
     fn add(self, v: V2f) -> Segment {
         segment(
             self.p0 + v,
@@ -222,11 +228,13 @@ pub struct Quadratic {
     pub p2: V2f,
 }
 
+#[inline(always)]
 pub fn quadratic(p0: V2f, p1: V2f, p2: V2f) -> Quadratic {
     Quadratic { p0, p1, p2 }
 }
 
 impl Quadratic {
+    #[inline(always)]
     pub fn split(&self, t: f32) -> (Quadratic, Quadratic) {
         let l10 = self.p0.lerp(self.p1, t);
         let l11 = self.p1.lerp(self.p2, t);
@@ -258,6 +266,7 @@ impl Quadratic {
 impl core::ops::Add<V2f> for Quadratic {
     type Output = Quadratic;
 
+    #[inline(always)]
     fn add(self, v: V2f) -> Quadratic {
         quadratic(
             self.p0 + v,
@@ -277,6 +286,7 @@ pub struct Cubic {
     pub p3: V2f,
 }
 
+#[inline(always)]
 pub fn cubic(p0: V2f, p1: V2f, p2: V2f, p3: V2f) -> Cubic {
     Cubic { p0, p1, p2, p3 }
 }
@@ -494,6 +504,7 @@ impl Cubic {
 impl core::ops::Add<V2f> for Cubic {
     type Output = Cubic;
 
+    #[inline(always)]
     fn add(self, v: V2f) -> Cubic {
         cubic(
             self.p0 + v,
