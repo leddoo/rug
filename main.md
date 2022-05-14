@@ -1,13 +1,24 @@
 todo:
+- base stuff.
+    - non-degenerate paths.
+    - unsafe offset.
+    - path::RevIter.
+- Rasterizer::stroke_path.
+- virtual arena.
+- path transforming.
 - quality of life:
+    - fix mouse position (y is up).
     - pan/zoom.
+        - matrix.
+        - path transform.
+        - maths.
     - drag & drop.
     - simple benchmark:
         - render at different resolutions.
         - on press `b`.
         - render returns stats instead of printing.
 - tiling.
-- stroking.
+- multi-threading.
 - dashing.
 - more shaders.
 - drops.svg
@@ -32,6 +43,12 @@ stuff:
 - pipeline: fill-rect.
 - command buffer.
 - text.
+
+
+invariants:
+- rect: min <= max
+- curve approx functions: in-order output.
+- paths finite.
 
 
 

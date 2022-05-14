@@ -2,6 +2,7 @@ extern crate alloc;
 use alloc::alloc::*;
 
 use crate::float::*;
+use crate::wide::*;
 use crate::geometry::*;
 use crate::path::*;
 use crate::image::{Mask};
@@ -74,13 +75,13 @@ impl<'a> Rasterizer<'a> {
     }
 
 
-    pub fn add_segment_p(&mut self, p0: V2f, p1: V2f) {
+    pub fn add_segment_p(&mut self, p0: F32x2, p1: F32x2) {
         let stride = self.deltas.stride() as f32;
         let height = self.height() as f32;
 
-        let dx_over_dy = (p1.x - p0.x).safe_div(p1.y - p0.y, 0.0);
-        let (x0, y0) = clamp_y(p0.x, p0.y, dx_over_dy, height);
-        let (x1, y1) = clamp_y(p1.x, p1.y, dx_over_dy, height);
+        let dx_over_dy = (p1.x() - p0.x()).safe_div(p1.y() - p0.y(), 0.0);
+        let (x0, y0) = clamp_y(p0.x(), p0.y(), dx_over_dy, height);
+        let (x1, y1) = clamp_y(p1.x(), p1.y(), dx_over_dy, height);
 
         let dx = x1 - x0;
         let dy = y1 - y0;
@@ -178,7 +179,7 @@ impl<'a> Rasterizer<'a> {
             self.flatten_recursion);
     }
 
-    pub fn add_quadratic_p(&mut self, p0: V2f, p1: V2f, p2: V2f) {
+    pub fn add_quadratic_p(&mut self, p0: F32x2, p1: F32x2, p2: F32x2) {
         self.add_quadratic(quadratic(p0, p1, p2))
     }
 
@@ -192,12 +193,12 @@ impl<'a> Rasterizer<'a> {
         cubic.flatten(&mut f, tol, rec);
     }
 
-    pub fn add_cubic_p(&mut self, p0: V2f, p1: V2f, p2: V2f, p3: V2f) {
+    pub fn add_cubic_p(&mut self, p0: F32x2, p1: F32x2, p2: F32x2, p3: F32x2) {
         self.add_cubic(cubic(p0, p1, p2, p3))
     }
 
 
-    pub fn fill_path(&mut self, path: &Path, position: V2f) {
+    pub fn fill_path(&mut self, path: &Path, position: F32x2) {
         path.iter(|curve| {
             use Curve::*;
             match curve {

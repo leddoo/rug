@@ -5,6 +5,7 @@ use alloc::{
     vec::Vec,
 };
 
+use crate::wide::*;
 use crate::geometry::*;
 
 
@@ -27,7 +28,7 @@ pub enum Curve {
 #[derive(Clone)]
 pub struct Path<'a> {
     pub verbs:  Box<[Verb], &'a dyn Allocator>,
-    pub points: Box<[V2f],  &'a dyn Allocator>,
+    pub points: Box<[F32x2],  &'a dyn Allocator>,
     pub aabb:   Rect,
 }
 
@@ -51,8 +52,8 @@ impl<'a> Path<'a> {
 
 pub struct Iter<'p, 'a> {
     path: &'p Path<'a>,
-    initial: V2f,
-    p0: V2f,
+    initial: F32x2,
+    p0: F32x2,
     point: usize,
 }
 
@@ -61,8 +62,8 @@ impl<'p, 'a> Iter<'p, 'a> {
     pub fn new(path: &'p Path<'a>) -> Iter<'p, 'a> {
         Iter {
             path,
-            initial: v2f(0.0, 0.0),
-            p0:      v2f(0.0, 0.0),
+            initial: F32x2::zero(),
+            p0:      F32x2::zero(),
             point:   0
         }
     }
@@ -115,10 +116,10 @@ impl<'p, 'a> Iter<'p, 'a> {
 
 
 pub struct PathBuilder<'a> {
-    verbs:  Vec<Verb, &'a dyn Allocator>,
-    points: Vec<V2f,  &'a dyn Allocator>,
+    verbs:  Vec<Verb,  &'a dyn Allocator>,
+    points: Vec<F32x2, &'a dyn Allocator>,
     aabb:   Rect,
-    p0:     V2f,
+    p0:     F32x2,
 }
 
 impl<'a> PathBuilder<'a> {
@@ -130,8 +131,8 @@ impl<'a> PathBuilder<'a> {
         PathBuilder {
             verbs:  Vec::new_in(allocator),
             points: Vec::new_in(allocator),
-            aabb:   rect(v2f(f32::MAX, f32::MAX), v2f(f32::MIN, f32::MIN)),
-            p0:     v2f(0.0, 0.0),
+            aabb:   rect(F32x2::splat(f32::MAX), F32x2::splat(f32::MIN)),
+            p0:     F32x2::zero(),
         }
     }
 
@@ -145,20 +146,20 @@ impl<'a> PathBuilder<'a> {
     }
 
 
-    pub fn move_to(&mut self, p0: V2f) {
+    pub fn move_to(&mut self, p0: F32x2) {
         self.verbs.push(Verb::Move);
         self.points.push(p0);
         self.aabb.include(p0);
         self.p0 = p0;
     }
 
-    pub fn segment_to(&mut self, p1: V2f) {
+    pub fn segment_to(&mut self, p1: F32x2) {
         self.verbs.push(Verb::Segment);
         self.points.push(p1);
         self.aabb.include(p1);
     }
 
-    pub fn quadratic_to(&mut self, p1: V2f, p2: V2f) {
+    pub fn quadratic_to(&mut self, p1: F32x2, p2: F32x2) {
         self.verbs.push(Verb::Quadratic);
         self.points.push(p1);
         self.points.push(p2);
@@ -166,7 +167,7 @@ impl<'a> PathBuilder<'a> {
         self.aabb.include(p2);
     }
 
-    pub fn cubic_to(&mut self, p1: V2f, p2: V2f, p3: V2f) {
+    pub fn cubic_to(&mut self, p1: F32x2, p2: F32x2, p3: F32x2) {
         self.verbs.push(Verb::Cubic);
         self.points.push(p1);
         self.points.push(p2);

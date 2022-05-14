@@ -1,170 +1,32 @@
 use crate::float::*;
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct V2f {
-    pub x: f32,
-    pub y: f32,
-}
-
-#[inline(always)]
-pub fn v2f(x: f32, y: f32) -> V2f {
-    V2f { x, y }
-}
-
-impl core::ops::Neg for V2f {
-    type Output = V2f;
-
-    #[inline(always)]
-    fn neg(self) -> V2f {
-        V2f {
-            x: -self.x,
-            y: -self.y,
-        }
-    }
-}
-
-impl core::ops::Add for V2f {
-    type Output = V2f;
-
-    #[inline(always)]
-    fn add(self, other: V2f) -> V2f {
-        V2f {
-            x: self.x + other.x,
-            y: self.y + other.y,
-        }
-    }
-}
-
-impl core::ops::Sub for V2f {
-    type Output = V2f;
-
-    #[inline(always)]
-    fn sub(self, other: V2f) -> V2f {
-        V2f {
-            x: self.x - other.x,
-            y: self.y - other.y,
-        }
-    }
-}
-
-impl core::ops::Mul<V2f> for V2f {
-    type Output = V2f;
-
-    #[inline(always)]
-    fn mul(self, other: V2f) -> V2f {
-        V2f {
-            x: self.x * other.x,
-            y: self.y * other.y,
-        }
-    }
-}
-
-impl core::ops::Div<V2f> for V2f {
-    type Output = V2f;
-
-    #[inline(always)]
-    fn div(self, other: V2f) -> V2f {
-        V2f {
-            x: self.x / other.x,
-            y: self.y / other.y,
-        }
-    }
-}
-
-impl core::ops::Mul<V2f> for f32 {
-    type Output = V2f;
-
-    #[inline(always)]
-    fn mul(self, vec: V2f) -> V2f {
-        V2f {
-            x: self * vec.x,
-            y: self * vec.y,
-        }
-    }
-}
-
-impl core::ops::Div<f32> for V2f {
-    type Output = V2f;
-
-    #[inline(always)]
-    fn div(self, scalar: f32) -> V2f {
-        V2f {
-            x: self.x / scalar,
-            y: self.y / scalar,
-        }
-    }
-}
-
-impl V2f {
-    #[inline(always)]
-    pub fn dot(self, other: V2f) -> f32 {
-        (self.x * other.x) + (self.y * other.y)
-    }
-
-    #[inline(always)]
-    pub fn length_squared(self) -> f32 {
-        self.dot(self)
-    }
-
-    #[inline(always)]
-    pub fn length(self) -> f32 {
-        self.length_squared().sqrt()
-    }
-
-    #[inline(always)]
-    pub fn lerp(self, other: Self, t: f32) -> V2f {
-        (1.0 - t)*self + t*other
-    }
-
-    #[inline(always)]
-    pub fn min(self, other: V2f) -> V2f {
-        V2f {
-            x: self.x.min(other.x),
-            y: self.y.min(other.y),
-        }
-    }
-
-    #[inline(always)]
-    pub fn max(self, other: V2f) -> V2f {
-        V2f {
-            x: self.x.max(other.x),
-            y: self.y.max(other.y),
-        }
-    }
-
-    #[inline(always)]
-    pub fn clamp(self, low: V2f, high: V2f) -> V2f {
-        self.max(low).min(high)
-    }
-}
+use crate::wide::*;
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Rect {
-    pub min: V2f,
-    pub max: V2f,
+    pub min: F32x2,
+    pub max: F32x2,
 }
 
 #[inline(always)]
-pub fn rect(min: V2f, max: V2f) -> Rect {
+pub fn rect(min: F32x2, max: F32x2) -> Rect {
     Rect { min, max }
 }
 
 impl Rect {
     #[inline(always)]
-    pub fn include(&mut self, p: V2f) {
+    pub fn include(&mut self, p: F32x2) {
         self.min = self.min.min(p);
         self.max = self.max.max(p);
     }
 
     #[inline(always)]
-    pub fn contains(&mut self, p: V2f) -> bool {
-           p.x >= self.min.x && p.x < self.max.x
-        && p.y >= self.min.y && p.y < self.max.y
+    pub fn contains(&mut self, p: F32x2) -> bool {
+        p.ge(self.min).all() && p.lt(self.max).all()
     }
 
     #[inline(always)]
-    pub fn grow(self, delta: V2f) -> Rect {
+    pub fn grow(self, delta: F32x2) -> Rect {
         rect(self.min - delta, self.max + delta)
     }
 
@@ -179,39 +41,44 @@ impl Rect {
     #[inline(always)]
     pub fn round_inclusive_fast(self) -> Rect {
         rect(
-            v2f(floor_fast(self.min.x), floor_fast(self.min.y)),
-            v2f(ceil_fast(self.max.x),  ceil_fast(self.max.y)),
+            self.min.floor_fast(),
+            self.max.ceil_fast(),
         )
     }
 
     #[inline(always)]
-    pub fn width(self) -> f32 {
-        self.max.x - self.min.x
+    pub fn size(self) -> F32x2 {
+        self.max - self.min
     }
 
     #[inline(always)]
-    pub fn height(self) -> f32 {
-        self.max.y - self.min.y
+    pub fn width(self) -> F32 {
+        self.size().x()
+    }
+
+    #[inline(always)]
+    pub fn height(self) -> F32 {
+        self.size().y()
     }
 }
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Segment {
-    pub p0: V2f,
-    pub p1: V2f,
+    pub p0: F32x2,
+    pub p1: F32x2,
 }
 
 #[inline(always)]
-pub fn segment(p0: V2f, p1: V2f) -> Segment {
+pub fn segment(p0: F32x2, p1: F32x2) -> Segment {
     Segment { p0, p1 }
 }
 
-impl core::ops::Add<V2f> for Segment {
+impl core::ops::Add<F32x2> for Segment {
     type Output = Segment;
 
     #[inline(always)]
-    fn add(self, v: V2f) -> Segment {
+    fn add(self, v: F32x2) -> Segment {
         segment(
             self.p0 + v,
             self.p1 + v,
@@ -223,13 +90,13 @@ impl core::ops::Add<V2f> for Segment {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Quadratic {
-    pub p0: V2f,
-    pub p1: V2f,
-    pub p2: V2f,
+    pub p0: F32x2,
+    pub p1: F32x2,
+    pub p2: F32x2,
 }
 
 #[inline(always)]
-pub fn quadratic(p0: V2f, p1: V2f, p2: V2f) -> Quadratic {
+pub fn quadratic(p0: F32x2, p1: F32x2, p2: F32x2) -> Quadratic {
     Quadratic { p0, p1, p2 }
 }
 
@@ -243,7 +110,7 @@ impl Quadratic {
     }
 
     // u32 parameter is max_recursion.
-    pub fn flatten<F: FnMut(V2f, V2f, u32)>
+    pub fn flatten<F: FnMut(F32x2, F32x2, u32)>
         (&self, f: &mut F, tolerance_squared: f32, max_recursion: u32)
     {
         /* max error occurs for t = 0.5:
@@ -263,11 +130,11 @@ impl Quadratic {
     }
 }
 
-impl core::ops::Add<V2f> for Quadratic {
+impl core::ops::Add<F32x2> for Quadratic {
     type Output = Quadratic;
 
     #[inline(always)]
-    fn add(self, v: V2f) -> Quadratic {
+    fn add(self, v: F32x2) -> Quadratic {
         quadratic(
             self.p0 + v,
             self.p1 + v,
@@ -280,14 +147,14 @@ impl core::ops::Add<V2f> for Quadratic {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cubic {
-    pub p0: V2f,
-    pub p1: V2f,
-    pub p2: V2f,
-    pub p3: V2f,
+    pub p0: F32x2,
+    pub p1: F32x2,
+    pub p2: F32x2,
+    pub p3: F32x2,
 }
 
 #[inline(always)]
-pub fn cubic(p0: V2f, p1: V2f, p2: V2f, p3: V2f) -> Cubic {
+pub fn cubic(p0: F32x2, p1: F32x2, p2: F32x2, p3: F32x2) -> Cubic {
     Cubic { p0, p1, p2, p3 }
 }
 
@@ -484,7 +351,7 @@ impl Cubic {
 
 
     // u32 parameter is remaining recursion budget.
-    pub fn flatten<F: FnMut(V2f, V2f, u32)>
+    pub fn flatten<F: FnMut(F32x2, F32x2, u32)>
         (&self, f: &mut F, tolerance_squared: f32, max_recursion: u32)
     {
         // halve tolerance, because we approximate twice.
@@ -501,11 +368,11 @@ impl Cubic {
     }
 }
 
-impl core::ops::Add<V2f> for Cubic {
+impl core::ops::Add<F32x2> for Cubic {
     type Output = Cubic;
 
     #[inline(always)]
-    fn add(self, v: V2f) -> Cubic {
+    fn add(self, v: F32x2) -> Cubic {
         cubic(
             self.p0 + v,
             self.p1 + v,

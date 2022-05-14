@@ -32,7 +32,7 @@ pub fn fill_mask(target: &mut Target, offset: U32x2, mask: &Mask, color: F32x4) 
                     let x0 = mask_x0.max(0) as usize;
                     let x1 = mask_x1.min(mask_width) as usize;
 
-                    let mut coverage = F32x8::default();
+                    let mut coverage = F32x8::zero();
                     for x in x0..x1 {
                         coverage[x - x0 + dx] = mask[(x, mask_y)];
                     }

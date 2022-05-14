@@ -42,9 +42,6 @@ fn program() {
             let buffer = render_svg(&svg, w, h);
             window.fill_pixels(&buffer, 0, 0, w, h);
         }
-        else {
-            std::thread::sleep(std::time::Duration::from_millis(7));
-        }
     }
 }
 
@@ -127,7 +124,7 @@ fn glyph_to_path(
     scale: f32,
     rasterizer: &mut Rasterizer,
 ) {
-    let mut builder = Builder { r: rasterizer, p0: v2f(0.0, 0.0), s: scale };
+    let mut builder = Builder { r: rasterizer, p0: F32x2::zero(), s: scale };
 
     let _bbox = match face.outline_glyph(glyph_id, &mut builder) {
         Some(v) => v,
@@ -137,31 +134,31 @@ fn glyph_to_path(
     struct Builder<'r, 'a> {
         s: f32,
         r:  &'r mut Rasterizer<'a>,
-        p0: V2f,
+        p0: F32x2,
     }
 
     impl ttf::OutlineBuilder for Builder<'_, '_> {
         fn move_to(&mut self, x: f32, y: f32) {
-            self.p0 = self.s*v2f(x, y);
+            self.p0 = self.s * F32x2::new(x, y);
         }
 
         fn line_to(&mut self, x: f32, y: f32) {
-            let p1 = self.s*v2f(x, y);
+            let p1 = self.s * F32x2::new(x, y);
             self.r.add_segment_p(self.p0, p1);
             self.p0 = p1;
         }
 
         fn quad_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
-            let p1 = self.s*v2f(x1, y1);
-            let p2 = self.s*v2f(x2, y2);
+            let p1 = self.s * F32x2::new(x1, y1);
+            let p2 = self.s * F32x2::new(x2, y2);
             self.r.add_quadratic_p(self.p0, p1, p2);
             self.p0 = p2;
         }
 
         fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32) {
-            let p1 = self.s*v2f(x1, y1);
-            let p2 = self.s*v2f(x2, y2);
-            let p3 = self.s*v2f(x3, y3);
+            let p1 = self.s * F32x2::new(x1, y1);
+            let p2 = self.s * F32x2::new(x2, y2);
+            let p3 = self.s * F32x2::new(x3, y3);
             self.r.add_cubic_p(self.p0, p1, p2, p3);
             self.p0 = p3;
         }
@@ -234,21 +231,10 @@ fn parse_xml(xml: &str) -> Svg<'static> {
             "path" => {
                 use core::str::FromStr;
 
-                let fill = node.attribute("fill")?;
-                let color = svgtypes::Color::from_str(fill).ok()?;
-
-                let alpha =
-                    if node.has_attribute("fill-opacity") {
-                        svgtypes::Number::from_str(node.attribute("fill-opacity").unwrap()).unwrap().0 as f32
-                    }
-                    else {
-                        1.0
-                    };
-
                 use svgtypes::PathSegment::*;
 
-                fn to_v2f(x: f64, y: f64) -> V2f {
-                    v2f(x as f32, y as f32)
+                fn to_vec(x: f64, y: f64) -> F32x2 {
+                    F32x2::new(x as f32, y as f32)
                 }
 
                 let mut pb = PathBuilder::new();
@@ -256,22 +242,22 @@ fn parse_xml(xml: &str) -> Svg<'static> {
                     match curve.unwrap() {
                         MoveTo { abs, x, y } => {
                             assert!(abs);
-                            pb.move_to(to_v2f(x, y));
+                            pb.move_to(to_vec(x, y));
                         },
 
                         LineTo { abs, x: x1, y: y1 } => {
                             assert!(abs);
-                            pb.segment_to(to_v2f(x1, y1));
+                            pb.segment_to(to_vec(x1, y1));
                         },
 
                         Quadratic { abs, x1, y1, x: x2, y: y2 } => {
                             assert!(abs);
-                            pb.quadratic_to(to_v2f(x1, y1), to_v2f(x2, y2));
+                            pb.quadratic_to(to_vec(x1, y1), to_vec(x2, y2));
                         },
 
                         CurveTo { abs, x1, y1, x2, y2, x: x3, y: y3 } => {
                             assert!(abs);
-                            pb.cubic_to(to_v2f(x1, y1), to_v2f(x2, y2), to_v2f(x3, y3));
+                            pb.cubic_to(to_vec(x1, y1), to_vec(x2, y2), to_vec(x3, y3));
                         },
 
                         ClosePath { abs } => {
@@ -286,18 +272,34 @@ fn parse_xml(xml: &str) -> Svg<'static> {
                     }
                 }
 
-
                 let path = pb.build();
 
-                let a = alpha * (color.alpha as f32 / 255.0);
-                let color = F32x4::from([
-                    color.red   as f32 / 255.0,
-                    color.green as f32 / 255.0,
-                    color.blue  as f32 / 255.0,
-                    a,
-                ]);
+                if let Some(fill) = node.attribute("fill") {
+                    if let Ok(color) = svgtypes::Color::from_str(fill) {
 
-                result.paths.push((path, color));
+                        let alpha =
+                            if let Some(opacity) = node.attribute("fill-opacity") {
+                                svgtypes::Number::from_str(opacity).unwrap().0 as f32
+                            }
+                            else {
+                                1.0
+                            };
+
+                        let a = alpha * (color.alpha as f32 / 255.0);
+                        let color = F32x4::new(
+                            color.red   as f32 / 255.0,
+                            color.green as f32 / 255.0,
+                            color.blue  as f32 / 255.0,
+                            a,
+                        );
+
+                        result.paths.push((path.clone(), color));
+                    }
+                    else if fill != "none" {
+                        println!("unknown fill: {}", fill);
+                    }
+                }
+
             },
 
             _ => {
@@ -315,7 +317,7 @@ fn parse_xml(xml: &str) -> Svg<'static> {
 #[inline(never)]
 fn render_svg(svg: &Svg, w: u32, h: u32) -> Vec<u32> {
     let mut image = Target::new(w, h);
-    image.clear(F32x4::from([0.0, 0.0, 0.0, 1.0]));
+    image.clear(F32x4::new(1.0, 0.0, 1.0, 1.0));
 
     let mut paths = 0;
     let mut pixels = 0;
@@ -323,16 +325,16 @@ fn render_svg(svg: &Svg, w: u32, h: u32) -> Vec<u32> {
 
     let t0 = std::time::Instant::now();
 
-    let image_aabb = rect(v2f(0.0, 0.0), v2f(image.width() as f32, image.height() as f32));
+    let image_aabb = rect(F32x2::new(0.0, 0.0), F32x2::new(image.width() as f32, image.height() as f32));
+    let half_size  = F32x2::new(w as f32 / 2.0, h as f32 / 2.0);
 
     for (path, color) in &svg.paths {
-        let half_size = v2f(w as f32 / 2.0, h as f32 / 2.0);
-        let visible = path.aabb().grow(half_size).contains(half_size);
+        let visible = path.aabb.grow(half_size).contains(half_size);
         if !visible {
             continue;
         }
 
-        let mask_aabb = path.aabb().clamp_to(image_aabb).round_inclusive_fast();
+        let mask_aabb = path.aabb.clamp_to(image_aabb).round_inclusive_fast();
 
         let mask_w = mask_aabb.width()  as u32;
         let mask_h = mask_aabb.height() as u32;
@@ -343,19 +345,12 @@ fn render_svg(svg: &Svg, w: u32, h: u32) -> Vec<u32> {
         let p0 = mask_aabb.min;
 
         let mut r = Rasterizer::new(mask_w, mask_h);
-        path.iter(|curve| {
-            use Curve::*;
-            match curve {
-                Segment(segment)     => { r.add_segment(segment + -p0); },
-                Quadratic(quadratic) => { r.add_quadratic(quadratic + -p0); },
-                Cubic(cubic)         => { r.add_cubic(cubic + -p0); },
-            }
-        });
+        r.fill_path(path, p0);
 
         paths += 1;
         pixels += (mask_w*mask_h) as usize;
 
-        fill_mask(&mut image, U32x2::from([p0.x as u32, p0.y as u32]), &r.accumulate(), *color);
+        fill_mask(&mut image, U32x2::from([p0.x() as u32, p0.y() as u32]), &r.accumulate(), *color);
     }
 
     let dt = t0.elapsed();
@@ -387,13 +382,12 @@ fn render_debug(w: u32, h: u32) -> Vec<u32> {
 
     use svgtypes::PathSegment::*;
 
-    let mut p0 = v2f(0.0, 0.0);
+    let mut p0 = F32x2::new(0.0, 0.0);
 
     let mut initial = None;
 
-    fn to_v2f(x: f64, y: f64) -> V2f {
-        //v2f(x as f32 - 116.0, y as f32 - 139.0)
-        v2f(x as f32, y as f32)
+    fn to_vec(x: f64, y: f64) -> F32x2 {
+        F32x2::new(x as f32, y as f32)
     }
 
     //let d = "M 142.632,157.137 C 142.632,157.137 141.098,157.137 137.262,155.219 135.344,155.219 124.603,151.766 119.232,142.176 119.232,142.176 131.124,151.383 142.632,157.137 ";
@@ -404,7 +398,7 @@ fn render_debug(w: u32, h: u32) -> Vec<u32> {
         match curve.unwrap() {
             MoveTo { abs, x, y } => {
                 assert!(abs);
-                p0 = to_v2f(x, y);
+                p0 = to_vec(x, y);
 
                 if initial.is_none() {
                     initial = Some(p0);
@@ -413,7 +407,7 @@ fn render_debug(w: u32, h: u32) -> Vec<u32> {
 
             LineTo { abs, x: x1, y: y1 } => {
                 assert!(abs);
-                let p1 = to_v2f(x1, y1);
+                let p1 = to_vec(x1, y1);
 
                 r.add_segment_p(p0, p1);
                 p0 = p1;
@@ -421,8 +415,8 @@ fn render_debug(w: u32, h: u32) -> Vec<u32> {
 
             Quadratic { abs, x1, y1, x: x2, y: y2 } => {
                 assert!(abs);
-                let p1 = to_v2f(x1, y1);
-                let p2 = to_v2f(x2, y2);
+                let p1 = to_vec(x1, y1);
+                let p2 = to_vec(x2, y2);
 
                 r.add_quadratic_p(p0, p1, p2);
                 p0 = p2;
@@ -430,9 +424,9 @@ fn render_debug(w: u32, h: u32) -> Vec<u32> {
 
             CurveTo { abs, x1, y1, x2, y2, x: x3, y: y3 } => {
                 assert!(abs);
-                let p1 = to_v2f(x1, y1);
-                let p2 = to_v2f(x2, y2);
-                let p3 = to_v2f(x3, y3);
+                let p1 = to_vec(x1, y1);
+                let p2 = to_vec(x2, y2);
+                let p3 = to_vec(x3, y3);
 
                 r.add_cubic_p(p0, p1, p2, p3);
                 p0 = p3;
@@ -440,7 +434,7 @@ fn render_debug(w: u32, h: u32) -> Vec<u32> {
 
             ClosePath { abs } => {
                 assert!(abs);
-                let p1 = initial.unwrap_or(v2f(0.0, 0.0));
+                let p1 = initial.unwrap_or(F32x2::new(0.0, 0.0));
                 initial = None;
 
                 r.add_segment_p(p0, p1);
@@ -453,7 +447,7 @@ fn render_debug(w: u32, h: u32) -> Vec<u32> {
         }
     }
 
-    let color = F32x4::from([1.0, 0.0, 1.0, 1.0]);
+    let color = F32x4::new(1.0, 0.0, 1.0, 1.0);
     fill_mask(&mut image, U32x2::from([0, 0]), &r.accumulate(), color);
 
     target_to_argb(image)

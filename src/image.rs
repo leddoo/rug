@@ -186,17 +186,17 @@ pub fn argb_u8x8_unpack(v: U32x8) -> (F32x8, F32x8, F32x8, F32x8) {
     let a = (v >> U32x8::splat(24)) & mask;
 
     let scale = F32x8::splat(255.0);
-    (r.cast() / scale,
-     g.cast() / scale,
-     b.cast() / scale,
-     a.cast() / scale)
+    (F32x8(r.cast()) / scale,
+     F32x8(g.cast()) / scale,
+     F32x8(b.cast()) / scale,
+     F32x8(a.cast()) / scale)
 }
 
 #[inline(always)]
 pub unsafe fn argb_u8x8_pack_clamped_255(v: (F32x8, F32x8, F32x8, F32x8)) -> U32x8 {
     #[inline(always)]
     unsafe fn to_int(v: F32x8) -> U32x8 {
-        core::mem::transmute(v.to_int_unchecked::<i32>())
+        core::mem::transmute(v.0.to_int_unchecked::<i32>())
     }
 
     let (r, g, b, a) = v;
