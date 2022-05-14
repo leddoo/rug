@@ -3,6 +3,7 @@ use alloc::alloc::*;
 
 use crate::float::*;
 use crate::geometry::*;
+use crate::path::*;
 use crate::image::{Mask};
 
 
@@ -160,13 +161,21 @@ impl<'a> Rasterizer<'a> {
     }
 
 
-    pub fn add_quadratic(&mut self, quadratic: Quadratic) {
-        let tol = self.flatten_tolerance.squared();
-        let rec = self.flatten_recursion;
+    pub fn add_quadratic_tol_rec(&mut self,
+        quadratic: Quadratic,
+        tolerance_squared: f32, max_recursion: u32
+    ) {
         let mut f = |p0, p1, _| {
             self.add_segment_p(p0, p1);
         };
-        quadratic.flatten(&mut f, tol, rec);
+        quadratic.flatten(&mut f, tolerance_squared, max_recursion);
+    }
+
+    pub fn add_quadratic(&mut self, quadratic: Quadratic) {
+        self.add_quadratic_tol_rec(
+            quadratic,
+            self.flatten_tolerance.squared(),
+            self.flatten_recursion);
     }
 
     pub fn add_quadratic_p(&mut self, p0: V2f, p1: V2f, p2: V2f) {
@@ -185,6 +194,18 @@ impl<'a> Rasterizer<'a> {
 
     pub fn add_cubic_p(&mut self, p0: V2f, p1: V2f, p2: V2f, p3: V2f) {
         self.add_cubic(cubic(p0, p1, p2, p3))
+    }
+
+
+    pub fn fill_path(&mut self, path: &Path, position: V2f) {
+        path.iter(|curve| {
+            use Curve::*;
+            match curve {
+                Segment(segment)     => { self.add_segment(segment + -position); },
+                Quadratic(quadratic) => { self.add_quadratic(quadratic + -position); },
+                Cubic(cubic)         => { self.add_cubic(cubic + -position); },
+            }
+        });
     }
 }
 
