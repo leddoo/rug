@@ -199,14 +199,15 @@ impl<'a> Rasterizer<'a> {
 
 
     pub fn fill_path(&mut self, path: &Path, position: F32x2) {
-        path.iter(|curve| {
-            use Curve::*;
-            match curve {
+        for event in path.iter() {
+            use IterEvent::*;
+            match event {
                 Segment(segment)     => { self.add_segment(segment + -position); },
                 Quadratic(quadratic) => { self.add_quadratic(quadratic + -position); },
                 Cubic(cubic)         => { self.add_cubic(cubic + -position); },
+                _ => (),
             }
-        });
+        }
     }
 }
 

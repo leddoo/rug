@@ -1,11 +1,12 @@
 todo:
 - base stuff.
-    - non-degenerate paths.
-    - unsafe offset.
     - path::RevIter.
+    - unsafe offset.
 - Rasterizer::stroke_path.
-- virtual arena.
+    - ad-hoc degeneracy checking.
+- tiling.
 - path transforming.
+- virtual arena.
 - quality of life:
     - fix mouse position (y is up).
     - pan/zoom.
@@ -17,7 +18,6 @@ todo:
         - render at different resolutions.
         - on press `b`.
         - render returns stats instead of printing.
-- tiling.
 - multi-threading.
 - dashing.
 - more shaders.
@@ -26,8 +26,8 @@ todo:
 
 
 stuff:
+- inf/nan robustness.
 - safer window abstraction.
-- use simd types instead of V2f.
 - static assert sizes & alignments.
 - simd-pre-process rasterizer.
 - perf:
