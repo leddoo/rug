@@ -76,6 +76,9 @@ impl<'a> Rasterizer<'a> {
 
 
     pub fn add_segment_p(&mut self, p0: F32x2, p1: F32x2) {
+        //println!("Segment(({}, {}), ({}, {})),", p0.x(), p0.y(), p1.x(), p1.y());
+        //println!("Vector(({}, {}), ({}, {})),", p0.x(), p0.y(), p1.x(), p1.y());
+
         let stride = self.deltas.stride() as f32;
         let height = self.height() as f32;
 
@@ -209,6 +212,119 @@ impl<'a> Rasterizer<'a> {
             }
         }
     }
+
+    pub fn stroke_path(&mut self,
+        path: &Path, left: f32, right: f32, position: F32x2,
+    ) {
+        //println!("stroke {} {}", left, right);
+        let left  = left.max(0.0);
+        let right = right.max(0.0);
+
+        let left  = if left  > self.flatten_tolerance { left }  else { 0.0 };
+        let right = if right > self.flatten_tolerance { right } else { 0.0 };
+
+        if left == 0.0 && right == 0.0 {
+            //println!("reject");
+            return;
+        }
+
+        let mut iter = path.iter();
+        while iter.has_next() {
+            let begin_verb = iter.verb;
+
+            let mut stroker = Stroker {
+                closed:            false,
+                has_prev:          false,
+                prev_end:          F32x2::zero(),
+                tolerance_squared: self.flatten_tolerance.squared(),
+                max_recursion:     self.flatten_recursion,
+                distance:          left,
+                rasterizer:        self,
+            };
+
+            // left offset.
+            loop {
+                match iter.next().unwrap() {
+                    IterEvent::Begin (_, closed) => {
+                        assert!(iter.verb == begin_verb + 1);
+                        stroker.closed = closed;
+                    },
+
+                    IterEvent::Segment (s) => {
+                        stroker.segment(s + -position);
+                    },
+
+                    IterEvent::Quadratic (q) => {
+                        stroker.quadratic(q + -position);
+                    },
+
+                    IterEvent::Cubic (c) => {
+                        stroker.cubic(c + -position);
+                    },
+
+                    IterEvent::End (_) => {
+                        break;
+                    },
+                }
+            }
+
+            if !stroker.has_prev || iter.verb - begin_verb <= 2 {
+                continue;
+            }
+
+            // right offset.
+            stroker.distance = right;
+            if !stroker.closed {
+                stroker.has_prev = false;
+            }
+
+            // manual path::RevIter, because that doesn't exist.
+            let mut verb  = iter.verb - 1;
+            let mut point = iter.point;
+
+            // process end
+            assert!(path.verbs[verb] == Verb::End);
+            let mut rev_p0 = path.points[point - 1];
+            point -= 1;
+            verb -= 1;
+
+            while verb > begin_verb {
+                match path.verbs[verb] {
+                    Verb::Begin | Verb::BeginClosed => unreachable!(),
+
+                    Verb::Segment => {
+                        let p0 = rev_p0;
+                        let p1 = path.points[point - 1];
+                        point -= 1;
+                        rev_p0 = p1;
+                        stroker.segment(segment(p0, p1) + -position);
+                    },
+
+                    Verb::Quadratic => {
+                        let p0 = rev_p0;
+                        let p1 = path.points[point - 1];
+                        let p2 = path.points[point - 2];
+                        point -= 2;
+                        rev_p0 = p2;
+                        stroker.quadratic(quadratic(p0, p1, p2) + -position);
+                    },
+
+                    Verb::Cubic => {
+                        let p0 = rev_p0;
+                        let p1 = path.points[point - 1];
+                        let p2 = path.points[point - 2];
+                        let p3 = path.points[point - 3];
+                        point -= 3;
+                        rev_p0 = p3;
+                        stroker.cubic(cubic(p0, p1, p2, p3) + -position)
+                    },
+
+                    Verb::End => unreachable!(),
+                }
+                verb -= 1;
+            }
+        }
+    }
 }
 
 
@@ -220,4 +336,119 @@ fn clamp_y(x: f32, y: f32, dx_over_dy: f32, h: f32) -> (f32, f32) {
         return (x + dx_over_dy*(h - y), h);
     }
     (x, y)
+}
+
+
+struct Stroker<'r, 'a> {
+    rasterizer:        &'r mut Rasterizer<'a>,
+    closed:            Bool,
+    has_prev:          Bool,
+    prev_end:          F32x2,
+    tolerance_squared: F32,
+    max_recursion:     u32,
+    distance:          F32,
+}
+
+impl<'r, 'a> Stroker<'r, 'a> {
+    #[inline(always)]
+    fn cap(&mut self, p0: F32x2, normal: F32x2) {
+        if !self.closed && !self.has_prev {
+            // butt cap.
+            let left  = p0 + self.distance*normal;
+            let right = p0 - self.distance*normal;
+            self.rasterizer.add_segment_p(right, left);
+        }
+    }
+
+    #[inline(always)]
+    fn join(&mut self, p0: F32x2, normal: F32x2) {
+        if self.has_prev {
+            // bevel join.
+            self.rasterizer.add_segment_p(self.prev_end, p0 + self.distance*normal);
+        }
+    }
+
+    #[inline(always)]
+    fn set_end(&mut self, end: F32x2) {
+        self.has_prev = true;
+        self.prev_end = end;
+    }
+
+    #[inline(always)]
+    fn segment(&mut self, segment: Segment) {
+        if let Some(normal) = segment.normal(self.tolerance_squared) {
+            self._segment(segment, normal);
+        }
+    }
+
+    fn _segment(&mut self, segment: Segment, normal: F32x2) {
+        self.cap(segment.p0, normal);
+
+        if self.distance != 0.0 {
+            self.join(segment.p0, normal);
+            self.rasterizer.add_segment(segment.offset(normal, self.distance));
+            self.set_end(segment.p1 + self.distance*normal);
+        }
+        else {
+            self.rasterizer.add_segment(segment);
+            self.set_end(segment.p1);
+        }
+    }
+
+    #[inline(always)]
+    fn quadratic(&mut self, quadratic: Quadratic) {
+        self._quadratic(quadratic, self.tolerance_squared, self.max_recursion)
+    }
+
+    fn _quadratic(&mut self, quadratic: Quadratic, tolerance_squared: F32, max_recursion: u32) {
+        let Quadratic { p0, p1, p2 } = quadratic;
+
+        if (p2 - p0).length_squared() <= self.tolerance_squared {
+            self.segment(segment(p0, p1));
+            self.segment(segment(p1, p2));
+            return;
+        }
+
+        match quadratic.normals(self.tolerance_squared) {
+            (Some(n0), Some(n1)) => {
+                self.cap(quadratic.p0, n0);
+
+                if self.distance != 0.0 {
+                    self.join(quadratic.p0, n0);
+
+                    let tol = tolerance_squared / 4.0;
+                    let rec = max_recursion / 2;
+                    let mut f = |q, rec_left| {
+                        self.rasterizer.add_quadratic_tol_rec(q, tol, rec + rec_left);
+                    };
+                    quadratic.offset(&mut f, n0, n1, self.distance, tol, rec);
+
+                    self.set_end(quadratic.p2 + self.distance*n1);
+                }
+                else {
+                    self.rasterizer.add_quadratic_tol_rec(quadratic, tolerance_squared, max_recursion);
+                    self.set_end(quadratic.p2);
+                }
+            },
+
+            (Some(n0), None) => {
+                self._segment(segment(p0, p2), n0);
+            },
+
+            (None, Some(n1)) => {
+                self._segment(segment(p0, p2), n1);
+            },
+
+            _ => (), // should be unreachable, because p0 = p1 = p2, but p0 ≠ p2
+        }
+    }
+
+    fn cubic(&mut self, cubic: Cubic) {
+        let tol = self.tolerance_squared / 4.0;
+        let rec = self.max_recursion / 2;
+        let mut f = |q, rec_left| {
+            self._quadratic(q, tol, rec + rec_left);
+        };
+        cubic.reduce(&mut f, tol, rec);
+    }
 }

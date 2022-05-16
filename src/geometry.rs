@@ -74,6 +74,18 @@ pub fn segment(p0: F32x2, p1: F32x2) -> Segment {
     Segment { p0, p1 }
 }
 
+impl Segment {
+    #[inline(always)]
+    pub fn normal(self, tolerance_squared: F32) -> Option<F32x2> {
+        (self.p1 - self.p0).normal(tolerance_squared)
+    }
+
+    #[inline(always)]
+    pub fn offset(self, normal: F32x2, distance: F32) -> Segment {
+        self + distance*normal
+    }
+}
+
 impl core::ops::Add<F32x2> for Segment {
     type Output = Segment;
 
@@ -102,16 +114,24 @@ pub fn quadratic(p0: F32x2, p1: F32x2, p2: F32x2) -> Quadratic {
 
 impl Quadratic {
     #[inline(always)]
-    pub fn split(&self, t: f32) -> (Quadratic, Quadratic) {
+    pub fn eval(self, t: F32) -> F32x2 {
+        let l10 = self.p0.lerp(self.p1, t);
+        let l11 = self.p1.lerp(self.p2, t);
+        l10.lerp(l11, t)
+    }
+
+    #[inline(always)]
+    pub fn split(self, t: F32) -> (Quadratic, Quadratic) {
         let l10 = self.p0.lerp(self.p1, t);
         let l11 = self.p1.lerp(self.p2, t);
         let l20 = l10.lerp(l11, t);
         (quadratic(self.p0, l10, l20), quadratic(l20, l11, self.p2))
     }
 
+
     // u32 parameter is max_recursion.
     pub fn flatten<F: FnMut(F32x2, F32x2, u32)>
-        (&self, f: &mut F, tolerance_squared: f32, max_recursion: u32)
+        (self, f: &mut F, tolerance_squared: f32, max_recursion: u32)
     {
         /* max error occurs for t = 0.5:
             err = length(p1/2 - (p0 + p2)/4)
@@ -126,6 +146,54 @@ impl Quadratic {
             let (q1, q2) = self.split(0.5);
             q1.flatten(f, tolerance_squared, max_recursion - 1);
             q2.flatten(f, tolerance_squared, max_recursion - 1);
+        }
+    }
+
+
+    #[inline(always)]
+    pub fn normals(self, tolerance_squared: F32) -> (Option<F32x2>, Option<F32x2>) {
+        ((self.p1 - self.p0).normal(tolerance_squared),
+         (self.p2 - self.p1).normal(tolerance_squared))
+    }
+
+    pub fn offset<F: FnMut(Quadratic, u32)>(
+        self, f: &mut F, normal_start: F32x2, normal_end: F32x2, distance: F32,
+        tolerance_squared: F32, max_recursion: u32
+    ) {
+        debug_assert!((self.p2 - self.p0).length_squared() > tolerance_squared);
+
+        let n0 = normal_start;
+        let n2 = normal_end;
+
+        // TODO: understand & explain.
+        let n1 = n0 + n2;
+        let n1 = 2.0 * n1/n1.dot(n1);
+
+        let approx =
+            quadratic(
+                self.p0 + distance*n0,
+                self.p1 + distance*n1,
+                self.p2 + distance*n2,
+            );
+
+        let mid = self.eval(0.5);
+        let n_mid = (self.p2 - self.p0).normal_unck();
+
+        let expected = mid + distance*n_mid;
+        let actual   = approx.eval(0.5);
+
+        let max_dev = actual - expected;
+        if max_recursion == 0 || max_dev.length_squared() <= tolerance_squared {
+            f(approx, max_recursion);
+        }
+        else {
+            // TODO: split at point closest to p1?
+            let (l, r) = self.split(0.5);
+            l.offset(f, n0, n_mid, distance, tolerance_squared, max_recursion - 1);
+            r.offset(f, n_mid, n2, distance, tolerance_squared, max_recursion - 1);
+            // TODO: can move end points too close together? (p2-p0).len_sq() <= tol_sq
+            //  - (?) mid point is max distance to end points.
+            //  - (?) split curves are flatter -> approx will be accepted.
         }
     }
 }
@@ -159,7 +227,7 @@ pub fn cubic(p0: F32x2, p1: F32x2, p2: F32x2, p3: F32x2) -> Cubic {
 }
 
 impl Cubic {
-    pub fn split(&self, t: f32) -> (Cubic, Cubic) {
+    pub fn split(self, t: f32) -> (Cubic, Cubic) {
         let l10 = self.p0.lerp(self.p1, t);
         let l11 = self.p1.lerp(self.p2, t);
         let l12 = self.p2.lerp(self.p3, t);
@@ -298,7 +366,7 @@ impl Cubic {
     */
 
     // mid point approximation.
-    pub fn approx_quad(&self) -> Quadratic {
+    pub fn approx_quad(self) -> Quadratic {
         quadratic(
             self.p0,
             0.25*3.0*(self.p1 + self.p2) - 0.25*(self.p0 + self.p3),
@@ -308,9 +376,9 @@ impl Cubic {
 
     // u32 parameter is remaining recursion budget.
     pub fn reduce<F: FnMut(Quadratic, u32)>
-        (&self, f: &mut F, tolerance_squared: f32, max_recursion: u32)
+        (self, f: &mut F, tolerance_squared: f32, max_recursion: u32)
     {
-        let Cubic {p0, p1, p2, p3} = *self;
+        let Cubic {p0, p1, p2, p3} = self;
 
         let scale: f32 = 0.0481125224324688137090957317; // sqrt(3)/36
         let err_sq = scale * (3.0*(p1 - p2) + (p3 - p0)).length_squared();
@@ -349,10 +417,9 @@ impl Cubic {
         }
     }
 
-
     // u32 parameter is remaining recursion budget.
     pub fn flatten<F: FnMut(F32x2, F32x2, u32)>
-        (&self, f: &mut F, tolerance_squared: f32, max_recursion: u32)
+        (self, f: &mut F, tolerance_squared: f32, max_recursion: u32)
     {
         // halve tolerance, because we approximate twice.
         let tolerance_squared = tolerance_squared / 4.0;

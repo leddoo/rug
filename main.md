@@ -1,9 +1,4 @@
 todo:
-- base stuff.
-    - path::RevIter.
-    - unsafe offset.
-- Rasterizer::stroke_path.
-    - ad-hoc degeneracy checking.
 - tiling.
 - path transforming.
 - virtual arena.
@@ -26,7 +21,17 @@ todo:
 
 
 stuff:
-- inf/nan robustness.
+- stroking:
+    - adjust flatten tolerance based on stroke width.
+        - reject based on ZERO_TOLERANCE.
+        - might want to increase recursion?
+    - could a "hairline stroker" improve performance for very thin strokes?
+    - more caps & joins: o' = c' + d R ((c'' sqrt(c' c')) - (c' 1/sqrt(c' c') (c'' c'))) / (c' c')
+- consider "line, quad, cubic" & "path segment".
+- robustness:
+    - inf/nan.
+    - scale.
+    - consistent rule for tolerance & inclusion (lt vs le).
 - safer window abstraction.
 - static assert sizes & alignments.
 - simd-pre-process rasterizer.

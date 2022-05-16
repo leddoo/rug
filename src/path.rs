@@ -12,11 +12,11 @@ use crate::geometry::*;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Verb {
     Begin,
+    BeginClosed,
     Segment,
     Quadratic,
     Cubic,
     End,
-    EndClosed,
 }
 
 // (invariant) verbs regex:
@@ -37,11 +37,11 @@ impl<'a> Path<'a> {
 
 
 pub enum IterEvent {
-    Begin,
+    Begin     (F32x2, Bool), // first-point, closed
     Segment   (Segment),
     Quadratic (Quadratic),
     Cubic     (Cubic),
-    End       {closed: Bool},
+    End       (F32x2), // last-point
 }
 
 pub struct Iter<'p, 'a> {
@@ -62,21 +62,26 @@ impl<'p, 'a> Iter<'p, 'a> {
         }
     }
 
+    pub fn has_next(&self) -> bool {
+        self.verb < self.path.verbs.len()
+    }
+
     pub fn next(&mut self) -> Option<IterEvent> {
         let path = self.path;
 
-        if self.verb >= path.verbs.len() {
+        if !self.has_next() {
             debug_assert!(self.verb  == path.verbs.len());
             debug_assert!(self.point == path.points.len());
             return None;
         }
 
-        let result = match path.verbs[self.verb] {
-            Verb::Begin => {
+        let verb = path.verbs[self.verb];
+        let result = match verb {
+            Verb::Begin | Verb::BeginClosed => {
                 let p0 = path.points[self.point];
                 self.point += 1;
                 self.p0 = p0;
-                IterEvent::Begin
+                IterEvent::Begin(p0, verb == Verb::BeginClosed)
             },
 
             Verb::Segment => {
@@ -106,8 +111,7 @@ impl<'p, 'a> Iter<'p, 'a> {
                 IterEvent::Cubic(cubic(p0, p1, p2, p3))
             },
 
-            Verb::End       => IterEvent::End { closed: false },
-            Verb::EndClosed => IterEvent::End { closed: true  },
+            Verb::End => IterEvent::End(self.p0),
         };
         self.verb += 1;
 
@@ -128,9 +132,10 @@ impl<'p, 'a> Iterator for Iter<'p, 'a> {
 pub struct PathBuilder<'a> {
     verbs:  Vec<Verb,  &'a dyn Allocator>,
     points: Vec<F32x2, &'a dyn Allocator>,
-    aabb:    Rect,
-    in_path: Bool,
-    begin:   F32x2,
+    aabb:   Rect,
+    in_path:     Bool,
+    begin_point: F32x2,
+    begin_verb:  usize,
 }
 
 impl<'a> PathBuilder<'a> {
@@ -142,9 +147,10 @@ impl<'a> PathBuilder<'a> {
         PathBuilder {
             verbs:  Vec::new_in(allocator),
             points: Vec::new_in(allocator),
-            aabb:    rect(F32x2::splat(f32::MAX), F32x2::splat(f32::MIN)),
-            in_path: false,
-            begin:   F32x2::zero(),
+            aabb:   rect(F32x2::splat(f32::MAX), F32x2::splat(f32::MIN)),
+            in_path:     false,
+            begin_point: F32x2::zero(),
+            begin_verb:  usize::MAX,
         }
     }
 
@@ -167,8 +173,9 @@ impl<'a> PathBuilder<'a> {
         self.verbs.push(Verb::Begin);
         self.points.push(p0);
         self.aabb.include(p0);
-        self.in_path = true;
-        self.begin   = p0;
+        self.in_path     = true;
+        self.begin_point = p0;
+        self.begin_verb  = self.verbs.len() - 1;
     }
 
     pub fn segment_to(&mut self, p1: F32x2) {
@@ -200,10 +207,12 @@ impl<'a> PathBuilder<'a> {
 
     pub fn close(&mut self) {
         assert!(self.in_path);
-        if *self.points.last().unwrap() != self.begin {
-            self.segment_to(self.begin);
+        if *self.points.last().unwrap() != self.begin_point {
+            self.segment_to(self.begin_point);
         }
-        self.verbs.push(Verb::EndClosed);
-        self.in_path = false;
+        self.verbs[self.begin_verb] = Verb::BeginClosed;
+        self.verbs.push(Verb::End);
+        self.in_path    = false;
+        self.begin_verb = usize::MAX;
     }
 }

@@ -29,6 +29,11 @@ macro_rules! wide_create {
             pub fn zero() -> $Self {
                 $Ctor($splat($zero))
             }
+
+            #[inline(always)]
+            pub fn as_array(self) -> [$Scalar; $width] {
+                *self.0.as_array()
+            }
         }
 
         impl Default for $Self {
@@ -248,6 +253,11 @@ macro_rules! wide_float {
             }
 
             #[inline(always)]
+            pub fn normalized(self) -> $Self {
+                self / self.length()
+            }
+
+            #[inline(always)]
             pub fn lerp(self, other: Self, t: $Scalar) -> $Self {
                 (1.0 - t)*self + t*other
             }
@@ -299,6 +309,29 @@ impl F32x2 {
     #[inline(always)]
     pub fn new(v0: F32, v1: F32) -> F32x2 {
         Self::from_array([v0, v1])
+    }
+
+    #[inline(always)]
+    pub fn rotated_acw(self) -> F32x2 {
+        F32x2::new(-self.y(), self.x())
+    }
+
+    #[inline(always)]
+    pub fn rotated_cw(self) -> F32x2 {
+        F32x2::new(self.y(), -self.x())
+    }
+
+    #[inline(always)]
+    pub fn normal(self, tolerance_squared: F32) -> Option<F32x2> {
+        if self.length_squared() > tolerance_squared {
+            return Some(self.normalized().rotated_acw());
+        }
+        None
+    }
+
+    #[inline(always)]
+    pub fn normal_unck(self) -> F32x2 {
+        self.normalized().rotated_acw()
     }
 }
 
