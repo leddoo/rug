@@ -7,15 +7,18 @@ use rug::*;
 fn main() {
     if 0==1 {
         let svg = {
-            let file = include_bytes!(r"D:\dev\vg-inputs\svg\tiger.svg");
+            //let file = include_bytes!(r"D:\dev\vg-inputs\svg\tiger.svg");
+            let file = include_bytes!(r"D:\dev\vg-inputs\svg\paris-30k.svg");
+            //let file = include_bytes!(r"D:\dev\vg-inputs\svg\hawaii.svg");
             parse_xml(core::str::from_utf8(file).unwrap())
         };
 
-        let mut target = Target::new(1024, 1024);
         let mut image = vec![];
-        loop {
-            _render_svg(&svg, &mut target, &mut image);
+        let start = std::time::Instant::now();
+        while start.elapsed() < std::time::Duration::from_secs(15) {
+            _render_svg(&svg, 1024, 1024, &mut image);
         }
+        win32::exit();
     }
 
     win32::run(program);
@@ -200,8 +203,6 @@ fn _target_to_argb(target: &Target, output: &mut Vec<u32>) {
     for y in 0..h as usize {
         let y = (h - 1) as usize - y;
 
-        // TODO: gamma correct.
-
         for x in 0..(w / 8) as usize {
             let rgba = target[(x, y)];
             let argb = argb_u8x8_pack(rgba);
@@ -213,6 +214,32 @@ fn _target_to_argb(target: &Target, output: &mut Vec<u32>) {
             let rgba = target[((w/8) as usize, y)];
             let argb = argb_u8x8_pack(rgba);
             output.extend(&argb.to_array()[0..rem]);
+        }
+    }
+}
+
+fn target_to_argb_at(target: &Target, w: usize, h: usize, output: &mut Vec<u32>, start: usize, stride: usize) {
+    for y in 0..h {
+        let offset = start + y*stride;
+
+        let y = (h - 1) - y;
+
+        for x in 0..(w / 8) {
+            let rgba = target[(x, y)];
+            let argb = argb_u8x8_pack(rgba);
+            for dx in 0..8 {
+                output[offset + 8*x + dx] = argb.as_array()[dx];
+            }
+        }
+
+        let rem = w % 8;
+        if rem > 0 {
+            let x = w/8;
+            let rgba = target[(x, y)];
+            let argb = argb_u8x8_pack(rgba);
+            for dx in 0..rem {
+                output[offset + 8*x + dx] = argb.as_array()[dx];
+            }
         }
     }
 }
@@ -366,90 +393,130 @@ fn parse_xml(xml: &str) -> Svg<'static> {
     result
 }
 
+
+fn rasterize_fill(tile: Rect, path: &Path) -> Option<(U32x2, Mask<'static>)> {
+    let half_size = tile.size() / 2.0;
+
+    let visible = path.aabb.grow(half_size).contains(tile.min + half_size);
+    if !visible {
+        return None;
+    }
+
+    let mask_aabb = path.aabb.clamp_to(tile).round_inclusive_fast();
+
+    let mask_w = mask_aabb.width()  as u32;
+    let mask_h = mask_aabb.height() as u32;
+    if mask_w == 0 || mask_h == 0 {
+        return None;
+    }
+
+    let p0 = mask_aabb.min;
+
+    let mut r = Rasterizer::new(mask_w, mask_h);
+    r.fill_path(path, p0);
+
+    let offset = (p0 - tile.min).0.cast();
+    Some((offset, r.accumulate()))
+}
+
+fn rasterize_stroke(tile: Rect, path: &Path, width: F32) -> Option<(U32x2, Mask<'static>)> {
+    let half_size = tile.size() / 2.0;
+
+    let path_aabb = path.aabb.grow(F32x2::splat(width));
+
+    let visible = path_aabb.grow(half_size).contains(tile.min + half_size);
+    if !visible {
+        return None;
+    }
+
+    let mask_aabb = path_aabb.clamp_to(tile).round_inclusive_fast();
+
+    let mask_w = mask_aabb.width()  as u32;
+    let mask_h = mask_aabb.height() as u32;
+    if mask_w == 0 || mask_h == 0 {
+        return None;
+    }
+
+    let p0 = mask_aabb.min;
+
+    let mut r = Rasterizer::new(mask_w, mask_h);
+    r.stroke_path(path, width/2.0, width/2.0, p0);
+
+    let offset = (p0 - tile.min).0.cast();
+    Some((offset, r.accumulate()))
+}
+
+
 fn render_svg(svg: &Svg, w: u32, h: u32) -> Vec<u32> {
-    let mut target = Target::new(w, h);
     let mut output = vec![];
-    _render_svg(svg, &mut target, &mut output);
+    _render_svg(svg, w, h, &mut output);
     output
 }
 
 #[inline(never)]
-fn _render_svg(svg: &Svg, target: &mut Target, output: &mut Vec<u32>) {
-    let [w, h] = *target.bounds().as_array();
-    //target.clear(F32x4::new(1.0, 0.0, 1.0, 1.0));
-    target.clear(F32x4::new(15.0/255.0, 20.0/255.0, 25.0/255.0, 1.0));
+fn _render_svg(svg: &Svg, w: u32, h: u32, output: &mut Vec<u32>) {
+    output.clear();
+    output.reserve((w*h) as usize);
+    unsafe { output.set_len((w*h) as usize) };
+
+    let tile_size = 96;
+    let mut tile_target = Target::new(tile_size, tile_size);
+
+    let tiles_x = (w + tile_size - 1) / tile_size;
+    let tiles_y = (h + tile_size - 1) / tile_size;
 
     let mut paths = 0;
     let mut pixels = 0;
 
-
     let t0 = std::time::Instant::now();
 
-    let target_aabb = rect(F32x2::new(0.0, 0.0), F32x2::new(target.width() as f32, target.height() as f32));
-    let half_size  = F32x2::new(w as f32 / 2.0, h as f32 / 2.0);
+    for ty in 0..tiles_y {
+        let tile_y0 = ty*tile_size;
+        let tile_y1 = (tile_y0 + tile_size).min(h);
 
-    for command in &svg.commands {
-        match command {
-            SvgCommand::Fill (path, color) => {
-                let visible = path.aabb.grow(half_size).contains(half_size);
-                if !visible {
-                    continue;
+        for tx in 0..tiles_x {
+            let tile_x0 = tx*tile_size;
+            let tile_x1 = (tile_x0 + tile_size).min(w);
+
+            let tile = rect(
+                F32x2::new(tile_x0 as f32, tile_y0 as f32),
+                F32x2::new(tile_x1 as f32, tile_y1 as f32),
+            );
+
+            //tile_target.clear(F32x4::new(1.0, 0.0, 1.0, 1.0));
+            tile_target.clear(F32x4::new(15.0/255.0, 20.0/255.0, 25.0/255.0, 1.0));
+
+            for command in &svg.commands {
+                match command {
+                    SvgCommand::Fill (path, color) => {
+                        if let Some((offset, mask)) = rasterize_fill(tile, path) {
+                            paths += 1;
+                            pixels += (mask.width() * mask.height()) as usize;
+                            fill_mask(&mut tile_target, offset, &mask, *color);
+                        }
+                    },
+
+                    SvgCommand::Stroke (path, color, width) => {
+                        if let Some((offset, mask)) = rasterize_stroke(tile, path, *width) {
+                            paths += 1;
+                            pixels += (mask.width() * mask.height()) as usize;
+                            fill_mask(&mut tile_target, offset, &mask, *color);
+                        }
+                    },
                 }
+            }
 
-                let mask_aabb = path.aabb.clamp_to(target_aabb).round_inclusive_fast();
-
-                let mask_w = mask_aabb.width()  as u32;
-                let mask_h = mask_aabb.height() as u32;
-                if mask_w == 0 || mask_h == 0 {
-                    continue;
-                }
-
-                let p0 = mask_aabb.min;
-
-                let mut r = Rasterizer::new(mask_w, mask_h);
-                r.fill_path(path, p0);
-
-                paths += 1;
-                pixels += (mask_w*mask_h) as usize;
-
-                fill_mask(target, U32x2::from([p0.x() as u32, p0.y() as u32]), &r.accumulate(), *color);
-            },
-
-            SvgCommand::Stroke (path, color, width) => {
-                let width = *width;
-
-                let path_aabb = path.aabb.grow(F32x2::new(width, width));
-
-                let visible = path_aabb.grow(half_size).contains(half_size);
-                if !visible {
-                    continue;
-                }
-
-                let mask_aabb = path_aabb.clamp_to(target_aabb).round_inclusive_fast();
-
-                let mask_w = mask_aabb.width()  as u32;
-                let mask_h = mask_aabb.height() as u32;
-                if mask_w == 0 || mask_h == 0 {
-                    continue;
-                }
-
-                let p0 = mask_aabb.min;
-
-                let mut r = Rasterizer::new(mask_w, mask_h);
-                r.stroke_path(path, width/2.0, width/2.0, p0);
-
-                paths += 1;
-                pixels += (mask_w*mask_h) as usize;
-
-                fill_mask(target, U32x2::from([p0.x() as u32, p0.y() as u32]), &r.accumulate(), *color);
-            },
+            let stride = w;
+            let start = ((h - tile_y1)*stride + tile_x0) as usize;
+            target_to_argb_at(&tile_target, (tile_x1 - tile_x0) as usize, (tile_y1 - tile_y0) as usize, output, start, stride as usize);
         }
     }
+
 
     let dt = t0.elapsed();
     let dt_path = dt.as_secs_f32() * 1000.0 * 1000.0 / paths as f32;
     let dt_pix = dt.as_secs_f32() * 1000.0 * 1000.0 * 1000.0 / pixels as f32;
-    let size = (target.stride() * h as usize) * core::mem::size_of::<[F32x8; 4]>();
+    let size = (tile_target.stride() * tile_target.height() as usize) * core::mem::size_of::<[F32x8; 4]>();
 
     if 1==1 {
         println!("{}x{}, {} kiB", w, h, size / 1024);
@@ -458,9 +525,6 @@ fn _render_svg(svg: &Svg, target: &mut Target, output: &mut Vec<u32>) {
         println!("{:.2?}ns per pixel", dt_pix);
         println!("{} pixels per path", pixels / paths);
     }
-
-
-    _target_to_argb(target, output)
 }
 
 

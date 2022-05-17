@@ -1,5 +1,12 @@
 todo:
-- tiling.
+- visible paths bit vectors.
+- rasterizer optimization:
+    - aabb rejection, unless path is mostly contained.
+    - add_segment: assume clamped, F32x2, branchless loop.
+    - clamp segments, unless path is fully contained.
+    - simd accumulate.
+    - buffered simd segment clamping.
+- multi-threading.
 - path transforming.
 - virtual arena.
 - quality of life:
@@ -13,7 +20,6 @@ todo:
         - render at different resolutions.
         - on press `b`.
         - render returns stats instead of printing.
-- multi-threading.
 - dashing.
 - more shaders.
 - drops.svg
