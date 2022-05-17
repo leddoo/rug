@@ -395,13 +395,6 @@ fn parse_xml(xml: &str) -> Svg<'static> {
 
 
 fn rasterize_fill(tile: Rect, path: &Path) -> Option<(U32x2, Mask<'static>)> {
-    let half_size = tile.size() / 2.0;
-
-    let visible = path.aabb.grow(half_size).contains(tile.min + half_size);
-    if !visible {
-        return None;
-    }
-
     let mask_aabb = path.aabb.clamp_to(tile).round_inclusive_fast();
 
     let mask_w = mask_aabb.width()  as u32;
@@ -420,15 +413,7 @@ fn rasterize_fill(tile: Rect, path: &Path) -> Option<(U32x2, Mask<'static>)> {
 }
 
 fn rasterize_stroke(tile: Rect, path: &Path, width: F32) -> Option<(U32x2, Mask<'static>)> {
-    let half_size = tile.size() / 2.0;
-
-    let path_aabb = path.aabb.grow(F32x2::splat(width));
-
-    let visible = path_aabb.grow(half_size).contains(tile.min + half_size);
-    if !visible {
-        return None;
-    }
-
+    let path_aabb = path.aabb.grow(F32x2::splat(width/2.0));
     let mask_aabb = path_aabb.clamp_to(tile).round_inclusive_fast();
 
     let mask_w = mask_aabb.width()  as u32;
@@ -464,11 +449,51 @@ fn _render_svg(svg: &Svg, w: u32, h: u32, output: &mut Vec<u32>) {
 
     let tiles_x = (w + tile_size - 1) / tile_size;
     let tiles_y = (h + tile_size - 1) / tile_size;
+    let tile_count = (tiles_x * tiles_y) as usize;
 
     let mut paths = 0;
     let mut pixels = 0;
 
     let t0 = std::time::Instant::now();
+
+    let path_count = svg.commands.len();
+    let visible_count = (path_count + 63)/64;
+    let mut visible = vec![0; visible_count*tile_count];
+
+    for (command_index, command) in svg.commands.iter().enumerate() {
+
+        fn fill_visible(visible: &mut Vec<u64>, visible_count: usize, path_index: usize, path_aabb: Rect,
+            tile_size: u32, tiles_x: u32, tiles_y: u32
+        ) {
+            let path_bit = 1 << (path_index as u64 % 64);
+
+            let tiles_end = F32x2::new(tiles_x as F32, tiles_y as F32);
+
+            let tile_size = F32x2::splat(tile_size as F32);
+            let rect = rect(path_aabb.min / tile_size, path_aabb.max / tile_size);
+            let rect = rect.round_inclusive_fast();
+            let begin: U32x2 = rect.min.clamp(F32x2::zero(), tiles_end).0.cast();
+            let end:   U32x2 = rect.max.clamp(F32x2::zero(), tiles_end).0.cast();
+
+            for y in begin[1]..end[1] {
+                for x in begin[0]..end[0] {
+                    let base = (y*tiles_x + x) as usize * visible_count;
+                    visible[base + path_index/64] |= path_bit;
+                }
+            }
+        }
+
+        match command {
+            SvgCommand::Fill (path, _color) => {
+                fill_visible(&mut visible, visible_count, command_index, path.aabb, tile_size, tiles_x, tiles_y);
+            },
+
+            SvgCommand::Stroke (path, _color, width) => {
+                let aabb = path.aabb.grow(F32x2::splat(width/2.0));
+                fill_visible(&mut visible, visible_count, command_index, aabb, tile_size, tiles_x, tiles_y);
+            },
+        }
+    }
 
     for ty in 0..tiles_y {
         let tile_y0 = ty*tile_size;
@@ -478,6 +503,9 @@ fn _render_svg(svg: &Svg, w: u32, h: u32, output: &mut Vec<u32>) {
             let tile_x0 = tx*tile_size;
             let tile_x1 = (tile_x0 + tile_size).min(w);
 
+            let base = (ty*tiles_x + tx) as usize * visible_count;
+            let visible = &visible[base .. base + visible_count];
+
             let tile = rect(
                 F32x2::new(tile_x0 as f32, tile_y0 as f32),
                 F32x2::new(tile_x1 as f32, tile_y1 as f32),
@@ -486,8 +514,12 @@ fn _render_svg(svg: &Svg, w: u32, h: u32, output: &mut Vec<u32>) {
             //tile_target.clear(F32x4::new(1.0, 0.0, 1.0, 1.0));
             tile_target.clear(F32x4::new(15.0/255.0, 20.0/255.0, 25.0/255.0, 1.0));
 
-            for command in &svg.commands {
-                match command {
+            for command_index in 0..svg.commands.len() {
+                if visible[command_index / 64] & (1 << (command_index % 64) as usize) == 0 {
+                    continue
+                }
+
+                match &svg.commands[command_index] {
                     SvgCommand::Fill (path, color) => {
                         if let Some((offset, mask)) = rasterize_fill(tile, path) {
                             paths += 1;

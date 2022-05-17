@@ -1,5 +1,4 @@
 todo:
-- visible paths bit vectors.
 - rasterizer optimization:
     - aabb rejection, unless path is mostly contained.
     - add_segment: assume clamped, F32x2, branchless loop.
