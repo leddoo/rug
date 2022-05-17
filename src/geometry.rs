@@ -182,8 +182,12 @@ impl Quadratic {
         let expected = mid + distance*n_mid;
         let actual   = approx.eval(0.5);
 
+        // TODO: keep this? (ensures (p2 - p0) is large enough in the recursive calls)
+        let l_smol = (mid - self.p0).length_squared() <= tolerance_squared;
+        let r_smol = (self.p2 - mid).length_squared() <= tolerance_squared;
+
         let max_dev = actual - expected;
-        if max_recursion == 0 || max_dev.length_squared() <= tolerance_squared {
+        if max_recursion == 0 || max_dev.length_squared() <= tolerance_squared || l_smol || r_smol {
             f(approx, max_recursion);
         }
         else {
@@ -191,9 +195,6 @@ impl Quadratic {
             let (l, r) = self.split(0.5);
             l.offset(f, n0, n_mid, distance, tolerance_squared, max_recursion - 1);
             r.offset(f, n_mid, n2, distance, tolerance_squared, max_recursion - 1);
-            // TODO: can move end points too close together? (p2-p0).len_sq() <= tol_sq
-            //  - (?) mid point is max distance to end points.
-            //  - (?) split curves are flatter -> approx will be accepted.
         }
     }
 }

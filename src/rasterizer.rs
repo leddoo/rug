@@ -236,6 +236,9 @@ impl<'a> Rasterizer<'a> {
                 closed:            false,
                 has_prev:          false,
                 prev_end:          F32x2::zero(),
+                has_first:         false,
+                first_left:        F32x2::zero(),
+                first_right:       F32x2::zero(),
                 tolerance_squared: self.flatten_tolerance.squared(),
                 max_recursion:     self.flatten_recursion,
                 distance:          left,
@@ -273,10 +276,8 @@ impl<'a> Rasterizer<'a> {
             }
 
             // right offset.
+            stroker.has_prev = false;
             stroker.distance = right;
-            if !stroker.closed {
-                stroker.has_prev = false;
-            }
 
             // manual path::RevIter, because that doesn't exist.
             let mut verb  = iter.verb - 1;
@@ -344,6 +345,9 @@ struct Stroker<'r, 'a> {
     closed:            Bool,
     has_prev:          Bool,
     prev_end:          F32x2,
+    has_first:         Bool,
+    first_left:        F32x2,
+    first_right:       F32x2,
     tolerance_squared: F32,
     max_recursion:     u32,
     distance:          F32,
@@ -352,7 +356,31 @@ struct Stroker<'r, 'a> {
 impl<'r, 'a> Stroker<'r, 'a> {
     #[inline(always)]
     fn cap(&mut self, p0: F32x2, normal: F32x2) {
-        if !self.closed && !self.has_prev {
+        // only for first curve.
+        if !self.has_prev {
+            self._cap(p0, normal);
+        }
+    }
+
+    fn _cap(&mut self, p0: F32x2, normal: F32x2) {
+        // closed paths are joined; open paths get caps.
+        if self.closed {
+            if !self.has_first {
+                // remember end points during left offset.
+                self.has_first   = true;
+                self.first_left  = p0 + self.distance*normal;
+                self.first_right = p0 - self.distance*normal;
+            }
+            else {
+                // draw join during right offset.
+                self.has_first = false;
+                let left  = p0 + self.distance*normal;
+                let right = p0 - self.distance*normal;
+                self.rasterizer.add_segment_p(right, self.first_left);
+                self.rasterizer.add_segment_p(self.first_right, left);
+            }
+        }
+        else {
             // butt cap.
             let left  = p0 + self.distance*normal;
             let right = p0 - self.distance*normal;
