@@ -15,18 +15,23 @@ pub fn rect(min: F32x2, max: F32x2) -> Rect {
 
 impl Rect {
     #[inline(always)]
+    pub fn from_points(p0: F32x2, p1: F32x2) -> Rect {
+        rect(p0.min(p1), p0.max(p1))
+    }
+
+    #[inline(always)]
     pub fn include(&mut self, p: F32x2) {
         self.min = self.min.min(p);
         self.max = self.max.max(p);
     }
 
     #[inline(always)]
-    pub fn contains(&mut self, p: F32x2) -> bool {
+    pub fn contains(&self, p: F32x2) -> bool {
         p.ge(self.min).all() && p.lt(self.max).all()
     }
 
     #[inline(always)]
-    pub fn contains_inclusive(&mut self, p: F32x2) -> bool {
+    pub fn contains_inclusive(&self, p: F32x2) -> bool {
         p.ge(self.min).all() && p.le(self.max).all()
     }
 
@@ -88,6 +93,14 @@ impl Segment {
     #[inline(always)]
     pub fn offset(self, normal: F32x2, distance: F32) -> Segment {
         self + distance*normal
+    }
+
+    #[inline(always)]
+    pub fn aabb(self) -> Rect {
+        rect(
+            self.p0.min(self.p1),
+            self.p0.max(self.p1),
+        )
     }
 }
 
@@ -201,6 +214,15 @@ impl Quadratic {
             l.offset(f, n0, n_mid, distance, tolerance_squared, max_recursion - 1);
             r.offset(f, n_mid, n2, distance, tolerance_squared, max_recursion - 1);
         }
+    }
+
+
+    #[inline(always)]
+    pub fn aabb(self) -> Rect {
+        rect(
+            self.p0.min(self.p1).min(self.p2),
+            self.p0.max(self.p1).max(self.p2),
+        )
     }
 }
 
@@ -438,6 +460,15 @@ impl Cubic {
         };
 
         self.reduce(&mut on_quad, tolerance_squared, max_recursion);
+    }
+    
+
+    #[inline(always)]
+    pub fn aabb(self) -> Rect {
+        rect(
+            (self.p0.min(self.p1)).min(self.p2.min(self.p3)),
+            (self.p0.max(self.p1)).max(self.p2.max(self.p3)),
+        )
     }
 }
 

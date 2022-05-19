@@ -15,9 +15,11 @@ pub const FLATTEN_RECURSION: u32 = 16;
 
 
 pub struct Rasterizer<'a> {
-    pub deltas: Mask<'a>,
     pub flatten_tolerance: f32,
     pub flatten_recursion: u32,
+    deltas: Mask<'a>,
+    size: F32x2,
+    safe_size: F32x2,
 }
 
 
@@ -27,14 +29,17 @@ impl<'a> Rasterizer<'a> {
     }
 
     pub fn new_in(width: u32, height: u32, allocator: &'a dyn Allocator) -> Rasterizer<'a> {
+        let size = F32x2::new(width as f32, height as f32);
         Rasterizer {
-            deltas: Mask::new_in(width + 1, height + 1, allocator),
             flatten_tolerance: FLATTEN_TOLERANCE,
             flatten_recursion: FLATTEN_RECURSION,
+            deltas: Mask::new_in(width + 2, height + 1, allocator),
+            size: size,
+            safe_size: size + F32x2::splat(0.9),
         }
     }
 
-    pub fn width(&self)  -> u32 { self.deltas.width() - 1 }
+    pub fn width(&self)  -> u32 { self.deltas.width() - 2 }
     pub fn height(&self) -> u32 { self.deltas.height() - 1 }
 
     pub fn accumulate(self) -> Mask<'a> {
@@ -56,35 +61,17 @@ impl<'a> Rasterizer<'a> {
     }
 
 
-    fn add_delta(&mut self, row_base: u32, x_i: f32, x0: f32, y0: f32, x1: f32, y1: f32) {
-        let row_base = row_base as usize;
-        let delta = y1 - y0;
-
-        if x_i < 0.0 {
-            self.deltas[row_base] += delta;
-        }
-        else if x_i < self.width() as f32 {
-            let x_mid = (x0 + x1) / 2.0 - x_i;
-            let delta_right = delta * x_mid;
-            debug_assert!(x_mid >= 0.0 - ZERO_TOLERANCE && x_mid <= 1.0 + ZERO_TOLERANCE);
-
-            let x = x_i as usize;
-            self.deltas[row_base + x + 0] += delta - delta_right;
-            self.deltas[row_base + x + 1] += delta_right;
-        }
-    }
-
-
-    pub fn add_segment_p(&mut self, p0: F32x2, p1: F32x2) {
+    pub unsafe fn add_segment_bounded(&mut self, p0: F32x2, p1: F32x2) {
+        debug_assert!(self.are_bounded(&[p0, p1]));
         //println!("Segment(({}, {}), ({}, {})),", p0.x(), p0.y(), p1.x(), p1.y());
         //println!("Vector(({}, {}), ({}, {})),", p0.x(), p0.y(), p1.x(), p1.y());
 
         let stride = self.deltas.stride() as f32;
-        let height = self.height() as f32;
 
-        let dx_over_dy = (p1.x() - p0.x()).safe_div(p1.y() - p0.y(), 0.0);
-        let (x0, y0) = clamp_y(p0.x(), p0.y(), dx_over_dy, height);
-        let (x1, y1) = clamp_y(p1.x(), p1.y(), dx_over_dy, height);
+        let x0 = p0[0];
+        let y0 = p0[1];
+        let x1 = p1[0];
+        let y1 = p1[1];
 
         let dx = x1 - x0;
         let dy = y1 - y0;
@@ -146,7 +133,7 @@ impl<'a> Rasterizer<'a> {
             }
 
             //println!("Segment(({}, {}), ({}, {})),", x_prev, y_prev, x, y);
-            self.add_delta(prev_base as u32, prev_x_i, x_prev, y_prev, x, y);
+            add_delta(self, prev_base as isize as usize, prev_x_i, x_prev, y_prev, x, y);
 
             x_prev = x;
             y_prev = y;
@@ -157,7 +144,152 @@ impl<'a> Rasterizer<'a> {
         debug_assert!(x_i == x_i1);
 
         //println!("Segment(({}, {}), ({}, {})),", x_prev, y_prev, x1, y1);
-        self.add_delta(row_base as u32, x_i, x_prev, y_prev, x1, y1);
+        add_delta(self, row_base as isize as usize, x_i, x_prev, y_prev, x1, y1);
+
+
+        #[inline(always)]
+        unsafe fn add_delta(r: &mut Rasterizer, row_base: usize, x_i: f32,
+            x0: f32, y0: f32, x1: f32, y1: f32
+        ) {
+            let delta = y1 - y0;
+
+            let x_mid = (x0 + x1) / 2.0 - x_i;
+            let delta_right = delta * x_mid;
+
+            debug_assert!(x_mid >= 0.0 - ZERO_TOLERANCE && x_mid <= 1.0 + ZERO_TOLERANCE);
+            debug_assert!(x_i >= 0.0 && x_i <= r.size.x());
+
+            let x: usize = x_i.to_int_unchecked::<i32>() as usize;
+            r.deltas[row_base + x + 0] += delta - delta_right;
+            r.deltas[row_base + x + 1] += delta_right;
+        }
+    }
+
+    pub unsafe fn add_left_delta_bounded(&mut self, y0: F32, y1: F32) {
+        debug_assert!(self.are_bounded(&[F32x2::new(0.0, y0), F32x2::new(0.0, y1)]));
+        //println!("Segment(({}, {}), ({}, {})),", 0.0, y0, 0.0, y1);
+
+        let stride = self.deltas.stride() as f32;
+
+        let dy = y1 - y0;
+
+        let y_step  = 1f32.copysign(dy);
+        let y_nudge = if dy >= 0.0 { 0f32 } else { 1f32 };
+
+        let y_i0 = floor_fast(y0);
+        let y_i1 = floor_fast(y1);
+
+        let y_steps = (y_i1 - y_i0).abs() as u32;
+        let steps = y_steps;
+
+        let mut y_prev = y0;
+        let mut y_next = y_i0 + y_step + y_nudge;
+
+        let     row_delta = stride.copysign(dy) as i32;
+        let mut row_base  = (stride * y_i0) as i32;
+
+        for _ in 0..steps {
+            let prev_base = row_base;
+            let y = y_next;
+            y_next   += y_step;
+            row_base += row_delta;
+
+            //println!("Segment(({}, {}), ({}, {})),", x_prev, y_prev, x, y);
+            add_delta(self, prev_base as isize as usize, y_prev, y);
+
+            y_prev = y;
+        }
+
+        debug_assert!(row_base == (stride * y_i1) as i32);
+
+        //println!("Segment(({}, {}), ({}, {})),", x_prev, y_prev, x1, y1);
+        add_delta(self, row_base as isize as usize, y_prev, y1);
+
+
+        #[inline(always)]
+        unsafe fn add_delta(r: &mut Rasterizer, row_base: usize, y0: f32, y1: f32) {
+            let delta = y1 - y0;
+            r.deltas[row_base + 0] += delta;
+        }
+    }
+
+    pub fn add_left_delta(&mut self, y0: F32, y1: F32) {
+        let y0 = y0.clamp(0.0, self.size.y());
+        let y1 = y1.clamp(0.0, self.size.y());
+        unsafe { self.add_left_delta_bounded(y0, y1) }
+    }
+
+    #[inline(always)]
+    pub fn add_segment_p(&mut self, p0: F32x2, p1: F32x2) {
+        let aabb = Rect::from_points(p0, p1);
+        if self.is_invisible(aabb) {
+            return;
+        }
+
+        if self.are_bounded(&[p0, p1]) {
+            unsafe { self.add_segment_bounded(p0, p1); }
+        }
+        else {
+            self._add_segment_p_slow_path(p0, p1)
+        }
+    }
+
+    #[inline(never)]
+    fn _add_segment_p_slow_path(&mut self, p0: F32x2, p1: F32x2) {
+        let (x0, y0) = (p0.x(), p0.y());
+        let (x1, y1) = (p1.x(), p1.y());
+
+        if x0 <= 0.0 + ZERO_TOLERANCE && x1 <= 0.0 + ZERO_TOLERANCE {
+            self.add_left_delta(y0, y1);
+            return;
+        }
+
+        let dx = (p1 - p0).x();
+        let dy = (p1 - p0).y();
+        let dx_over_dy = dx.safe_div(dy, 0.0);
+        let dy_over_dx = dy.safe_div(dx, 0.0);
+
+        let (x0, y0) = clamp(self, x0, y0, dx_over_dy, dy_over_dx, true);
+        let (x1, y1) = clamp(self, x1, y1, dx_over_dy, dy_over_dx, false);
+
+        unsafe { self.add_segment_bounded(F32x2::new(x0, y0), F32x2::new(x1, y1)); }
+
+
+        #[inline(always)]
+        fn clamp(r: &mut Rasterizer, mut x: f32, mut y: f32, dx_over_dy: f32, dy_over_dx: f32, is_first: bool) -> (f32, f32) {
+            let w = r.size.x();
+            let h = r.size.y();
+
+            if y < 0.0 {
+                x += dx_over_dy*(0.0 - y);
+                y  = 0.0;
+            }
+            else if y > h {
+                x += dx_over_dy*(h - y);
+                y  = h;
+            }
+
+            if x < 0.0 {
+                let y0 = y;
+
+                y = (y + dy_over_dx*(0.0 - x)).clamp(0.0, h);
+                x = 0.0;
+
+                let y1 = y;
+                if is_first {
+                    unsafe { r.add_left_delta_bounded(y0, y1); }
+                }
+                else {
+                    unsafe { r.add_left_delta_bounded(y1, y0); }
+                }
+            }
+            else if x > w {
+                y = (y + dy_over_dx*(w - x)).clamp(0.0, h);
+                x = w;
+            }
+
+            (x, y)
+        }
     }
 
     pub fn add_segment(&mut self, segment: Segment) {
@@ -169,10 +301,18 @@ impl<'a> Rasterizer<'a> {
         quadratic: Quadratic,
         tolerance_squared: f32, max_recursion: u32
     ) {
-        let mut f = |p0, p1, _| {
-            self.add_segment_p(p0, p1);
-        };
-        quadratic.flatten(&mut f, tolerance_squared, max_recursion);
+        if self.are_bounded(&[ quadratic.p0, quadratic.p1, quadratic.p2]) {
+            let mut f = |p0, p1, _| {
+                unsafe { self.add_segment_bounded(p0, p1) };
+            };
+            quadratic.flatten(&mut f, tolerance_squared, max_recursion);
+        }
+        else {
+            let mut f = |p0, p1, _| {
+                self.add_segment_p(p0, p1)
+            };
+            quadratic.flatten(&mut f, tolerance_squared, max_recursion);
+        }
     }
 
     pub fn add_quadratic(&mut self, quadratic: Quadratic) {
@@ -326,17 +466,23 @@ impl<'a> Rasterizer<'a> {
             }
         }
     }
-}
 
 
-fn clamp_y(x: f32, y: f32, dx_over_dy: f32, h: f32) -> (f32, f32) {
-    if y < 0.0 {
-        return (x + dx_over_dy*(0.0 - y), 0.0);
+    #[inline(always)]
+    pub fn is_invisible(&self, aabb: Rect) -> Bool {
+        aabb.min.ge(self.size).any() || aabb.max.y() <= 0.0
     }
-    if y > h {
-        return (x + dx_over_dy*(h - y), h);
+
+    #[inline(always)]
+    pub fn is_bounded(&self, p0: F32x2) -> Bool {
+        let safe_rect = rect(F32x2::zero(), self.safe_size);
+        safe_rect.contains(p0)
     }
-    (x, y)
+
+    #[inline(always)]
+    pub fn are_bounded(&self, ps: &[F32x2]) -> Bool {
+        ps.iter().all(|p| self.is_bounded(*p))
+    }
 }
 
 
@@ -409,6 +555,7 @@ impl<'r, 'a> Stroker<'r, 'a> {
         }
     }
 
+    #[inline(never)]
     fn _segment(&mut self, segment: Segment, normal: F32x2) {
         self.cap(segment.p0, normal);
 
@@ -428,6 +575,7 @@ impl<'r, 'a> Stroker<'r, 'a> {
         self._quadratic(quadratic, self.tolerance_squared, self.max_recursion)
     }
 
+    #[inline(never)]
     fn _quadratic(&mut self, quadratic: Quadratic, tolerance_squared: F32, max_recursion: u32) {
         let Quadratic { p0, p1, p2 } = quadratic;
 
@@ -471,6 +619,7 @@ impl<'r, 'a> Stroker<'r, 'a> {
         }
     }
 
+    #[inline(never)]
     fn cubic(&mut self, cubic: Cubic) {
         let tol = self.tolerance_squared / 4.0;
         let rec = self.max_recursion / 2;

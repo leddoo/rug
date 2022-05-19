@@ -1,7 +1,5 @@
 todo:
 - aabb rejection.
-- add_segment_clamped.
-    - left projection!
 - simd accumulate.
 - 4x2 fill_mask.
 - consider simd for computing add_segment_clamped parameters.
