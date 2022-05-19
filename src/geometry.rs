@@ -26,6 +26,11 @@ impl Rect {
     }
 
     #[inline(always)]
+    pub fn contains_inclusive(&mut self, p: F32x2) -> bool {
+        p.ge(self.min).all() && p.le(self.max).all()
+    }
+
+    #[inline(always)]
     pub fn grow(self, delta: F32x2) -> Rect {
         rect(self.min - delta, self.max + delta)
     }

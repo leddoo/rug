@@ -1,12 +1,14 @@
 todo:
-- rasterizer optimization:
-    - aabb rejection, unless path is mostly contained.
-    - add_segment: assume clamped, F32x2, branchless loop.
-    - clamp segments, unless path is fully contained.
-    - simd accumulate.
-    - buffered simd segment clamping.
+- aabb rejection.
+- add_segment_clamped.
+    - left projection!
+- simd accumulate.
+- 4x2 fill_mask.
+- consider simd for computing add_segment_clamped parameters.
+    - could also precompute params for last add_delta call -> optimize for 0 step segments.
 - multi-threading.
 - path transforming.
+    - stroking?
 - virtual arena.
 - quality of life:
     - fix mouse position (y is up).

@@ -5,6 +5,8 @@ pub use core::simd::u32x2 as U32x2;
 pub use core::simd::u32x4 as U32x4;
 pub use core::simd::u32x8 as U32x8;
 
+pub use core::simd::i32x2 as I32x2;
+
 
 pub type Bool = bool;
 pub type N32 = u32;
@@ -13,7 +15,7 @@ pub type F32 = f32;
 
 
 macro_rules! wide_create {
-    ($Self: ty, $Ctor: expr, $Scalar: ty, $width: expr, $from_array: expr, $splat: expr, $zero: expr) => {
+    ($Self: ty, $Ctor: expr, $Scalar: ty, $width: expr, $from_array: expr, $splat: expr, $zero: expr, $one: expr) => {
         impl $Self {
             #[inline(always)]
             pub fn from_array(vs: [$Scalar; $width]) -> $Self {
@@ -28,6 +30,11 @@ macro_rules! wide_create {
             #[inline(always)]
             pub fn zero() -> $Self {
                 $Ctor($splat($zero))
+            }
+
+            #[inline(always)]
+            pub fn one() -> $Self {
+                $Ctor($splat($one))
             }
 
             #[inline(always)]
@@ -76,7 +83,7 @@ macro_rules! wide_compare {
 }
 
 macro_rules! wide_ops {
-    ($Self: ty, $Ctor: expr, $Scalar: ty, $splat: expr) => {
+    ($Self: ty, $Ctor: expr, $Scalar: ty) => {
         impl core::ops::Add<$Self> for $Self {
             type Output = $Self;
 
@@ -113,13 +120,23 @@ macro_rules! wide_ops {
             }
         }
 
+        impl $Self {
+            #[inline(always)]
+            pub fn safe_div(self, other: $Self, default: $Self) -> $Self {
+                let is_zero = other.eq(<$Self>::zero());
+                let denom = is_zero.0.select(<$Self>::one().0, other.0);
+                let quot  = self.0 / denom;
+                $Ctor(is_zero.0.select(default.0, quot))
+            }
+        }
+
 
         impl core::ops::Mul<$Self> for $Scalar {
             type Output = $Self;
 
             #[inline(always)]
             fn mul(self, other: $Self) -> $Self {
-                $splat(self) * other
+                <$Self>::splat(self) * other
             }
         }
 
@@ -128,7 +145,7 @@ macro_rules! wide_ops {
 
             #[inline(always)]
             fn mul(self, other: $Scalar) -> $Self {
-                self * $splat(other)
+                self * <$Self>::splat(other)
             }
         }
 
@@ -137,7 +154,7 @@ macro_rules! wide_ops {
 
             #[inline(always)]
             fn div(self, other: $Scalar) -> $Self {
-                self / $splat(other)
+                self / <$Self>::splat(other)
             }
         }
 
@@ -225,6 +242,11 @@ macro_rules! wide_float {
     ($Self: ty, $Ctor: expr, $Scalar: ty) => {
         impl $Self {
             #[inline(always)]
+            pub fn copysign(self, from: $Self) -> $Self {
+                $Ctor(self.0.copysign(from.0))
+            }
+
+            #[inline(always)]
             pub fn floor_fast(self) -> $Self {
                 let i = unsafe { self.0.to_int_unchecked::<i32>().cast() };
                 $Ctor(i + self.0.lanes_lt(i).to_int().cast())
@@ -291,6 +313,11 @@ impl B32x2 {
     pub fn all(self) -> Bool {
         self.0.all()
     }
+
+    #[inline(always)]
+    pub fn to_int(self) -> I32x2 {
+        self.0.to_int()
+    }
 }
 
 
@@ -299,6 +326,18 @@ pub struct B32x4 (pub core::simd::mask32x4);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct B32x8 (pub core::simd::mask32x8);
+
+impl B32x8 {
+    #[inline(always)]
+    pub fn any(self) -> Bool {
+        self.0.any()
+    }
+
+    #[inline(always)]
+    pub fn all(self) -> Bool {
+        self.0.all()
+    }
+}
 
 
 
@@ -335,9 +374,9 @@ impl F32x2 {
     }
 }
 
-wide_create!(F32x2, F32x2, F32, 2, core::simd::f32x2::from_array, core::simd::f32x2::splat, 0.0);
+wide_create!(F32x2, F32x2, F32, 2, core::simd::f32x2::from_array, core::simd::f32x2::splat, 0.0, 1.0);
 wide_compare!(F32x2, F32x2, B32x2, B32x2);
-wide_ops!(F32x2, F32x2, F32, F32x2::splat);
+wide_ops!(F32x2, F32x2, F32);
 wide_min_max!(F32x2, F32x2, F32);
 wide_signed!(F32x2, F32x2);
 wide_float!(F32x2, F32x2, F32);
@@ -355,9 +394,9 @@ impl F32x4 {
     }
 }
 
-wide_create!(F32x4, F32x4, F32, 4, core::simd::f32x4::from_array, core::simd::f32x4::splat, 0.0);
+wide_create!(F32x4, F32x4, F32, 4, core::simd::f32x4::from_array, core::simd::f32x4::splat, 0.0, 1.0);
 wide_compare!(F32x4, F32x4, B32x4, B32x4);
-wide_ops!(F32x4, F32x4, F32, F32x4::splat);
+wide_ops!(F32x4, F32x4, F32);
 wide_min_max!(F32x4, F32x4, F32);
 wide_signed!(F32x4, F32x4);
 wide_float!(F32x4, F32x4, F32);
@@ -366,9 +405,9 @@ wide_float!(F32x4, F32x4, F32);
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct F32x8 (pub core::simd::f32x8);
 
-wide_create!(F32x8, F32x8, F32, 8, core::simd::f32x8::from_array, core::simd::f32x8::splat, 0.0);
+wide_create!(F32x8, F32x8, F32, 8, core::simd::f32x8::from_array, core::simd::f32x8::splat, 0.0, 1.0);
 wide_compare!(F32x8, F32x8, B32x8, B32x8);
-wide_ops!(F32x8, F32x8, F32, F32x8::splat);
+wide_ops!(F32x8, F32x8, F32);
 wide_min_max!(F32x8, F32x8, F32);
 wide_signed!(F32x8, F32x8);
 wide_float!(F32x8, F32x8, F32);

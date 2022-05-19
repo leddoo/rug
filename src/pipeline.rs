@@ -44,6 +44,19 @@ pub fn fill_mask(target: &mut Target, offset: U32x2, mask: &Mask, color: F32x4) 
 
             let p = (u as usize, y as usize);
 
+            if coverage.lt(F32x8::splat(0.5/255.0)).all() {
+                continue;
+            }
+            if color[3] == 1.0 && coverage.gt(F32x8::splat(254.5/255.0)).all() {
+                target[p] = (
+                    F32x8::splat(color[0]),
+                    F32x8::splat(color[1]),
+                    F32x8::splat(color[2]),
+                    F32x8::splat(1.0),
+                );
+                continue;
+            }
+
             let (tr, tg, tb, ta) = target[p];
 
             let (tr, tg, tb, ta) = run(tr, tg, tb, ta, coverage, color);
