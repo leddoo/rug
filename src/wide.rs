@@ -392,6 +392,22 @@ impl F32x4 {
     pub fn new(v0: F32, v1: F32, v2: F32, v3: F32) -> F32x4 {
         Self::from_array([v0, v1, v2, v3])
     }
+
+    #[inline(always)]
+    pub fn abs_fast(self) -> F32x4 {
+        let not_sign = !0x8000_0000;
+        let masked = self.0.to_bits() & U32x4::splat(not_sign);
+        F32x4(core::simd::f32x4::from_bits(masked))
+    }
+
+    #[inline(always)]
+    #[cfg(target_arch = "x86_64")]
+    pub fn min_fast(self, other: F32x4) -> F32x4 {
+        use core::arch::x86_64::*;
+        let a: __m128 = self.0.into();
+        let b: __m128 = other.0.into();
+        F32x4(unsafe { _mm_min_ps(a, b).into() })
+    }
 }
 
 wide_create!(F32x4, F32x4, F32, 4, core::simd::f32x4::from_array, core::simd::f32x4::splat, 0.0, 1.0);

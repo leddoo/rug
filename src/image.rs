@@ -116,6 +116,26 @@ impl<'a> Image_a_f32<'a> {
 
 
     #[inline(always)]
+    pub fn read4(&self, x: usize, y: usize) -> F32x4 {
+        assert!(x + 4 <= self.width() as usize && y < self.height() as usize);
+        unsafe {
+            let ptr = self.data.as_ptr().add(y*self.stride + x);
+            let ptr = ptr as *const F32x4;
+            ptr.read_unaligned()
+        }
+    }
+
+    #[inline(always)]
+    pub fn write4(&self, x: usize, y: usize, value: F32x4) {
+        assert!(x + 4 <= self.width() as usize && y < self.height() as usize);
+        unsafe {
+            let ptr = self.data.as_ptr().add(y*self.stride + x);
+            let ptr = ptr as *mut F32x4;
+            ptr.write_unaligned(value)
+        }
+    }
+
+    #[inline(always)]
     pub fn read8(&self, x: usize, y: usize) -> F32x8 {
         assert!(x + 8 <= self.width() as usize && y < self.height() as usize);
         unsafe {

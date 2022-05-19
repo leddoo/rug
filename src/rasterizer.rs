@@ -42,6 +42,8 @@ impl<'a> Rasterizer<'a> {
     pub fn width(&self)  -> u32 { self.deltas.width() - 2 }
     pub fn height(&self) -> u32 { self.deltas.height() - 1 }
 
+
+    #[cfg(not(target_arch = "x86_64"))]
     pub fn accumulate(self) -> Mask<'a> {
         let w = self.width() as usize;
         let h = self.height() as usize;
@@ -51,6 +53,51 @@ impl<'a> Rasterizer<'a> {
         for y in 0..h {
             let mut c = 0.0;
             for x in 0..w {
+                c += deltas[(x, y)];
+                deltas[(x, y)] = c.abs().min(1.0);
+            }
+        }
+
+        deltas.truncate(w as u32, h as u32);
+        deltas
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    pub fn accumulate(self) -> Mask<'a> {
+        let w = self.width() as usize;
+        let h = self.height() as usize;
+
+        let mut deltas = self.deltas;
+
+        for y in 0..h {
+
+            let mut c = F32x4::zero();
+
+            let aligned_w = w/4*4;
+
+            for x in (0..aligned_w).step_by(4) {
+                let mut d = deltas.read4(x, y);
+
+                d = d + shift::<4>(d);
+                d = d + shift::<8>(d);
+                c = c + d;
+
+                deltas.write4(x, y, c.abs_fast().min_fast(F32x4::splat(1.0)));
+
+                c = F32x4::splat(c[3]);
+
+
+                #[inline(always)]
+                fn shift<const AMOUNT: i32>(v: F32x4) -> F32x4 { unsafe {
+                    use core::arch::x86_64::*;
+                    let m128: __m128i = v.0.to_bits().into();
+                    let m128 = _mm_slli_si128::<AMOUNT>(m128);
+                    F32x4(core::simd::f32x4::from_bits(m128.into()))
+                }}
+            }
+
+            let mut c = c[3];
+            for x in aligned_w..w {
                 c += deltas[(x, y)];
                 deltas[(x, y)] = c.abs().min(1.0);
             }

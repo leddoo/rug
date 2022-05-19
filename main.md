@@ -1,9 +1,9 @@
 todo:
-- aabb rejection.
-- simd accumulate.
-- 4x2 fill_mask.
-- consider simd for computing add_segment_clamped parameters.
+- try simd for computing add_segment_clamped parameters.
     - could also precompute params for last add_delta call -> optimize for 0 step segments.
+- 4 wide fill_mask.
+- align rasterizer mask.
+- aabb rejection.
 - multi-threading.
 - path transforming.
     - stroking?
