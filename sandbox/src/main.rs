@@ -74,35 +74,6 @@ struct Svg<'a> {
 }
 
 
-fn target_to_argb(target: &Target) -> Vec<u32> {
-    let mut output = vec![];
-    _target_to_argb(target, &mut output);
-    output
-}
-
-fn _target_to_argb(target: &Target, output: &mut Vec<u32>) {
-    let [w, h] = *target.bounds().as_array();
-    output.clear();
-    output.reserve((w*h) as usize);
-
-    for y in 0..h as usize {
-        let y = (h - 1) as usize - y;
-
-        for x in 0..(w / 8) as usize {
-            let rgba = target[(x, y)];
-            let argb = argb_u8x8_pack(rgba);
-            output.extend(argb.to_array());
-        }
-
-        let rem = (w % 8) as usize;
-        if rem > 0 {
-            let rgba = target[((w/8) as usize, y)];
-            let argb = argb_u8x8_pack(rgba);
-            output.extend(&argb.to_array()[0..rem]);
-        }
-    }
-}
-
 fn target_to_argb_at(target: &Target, w: usize, h: usize, output: &mut Vec<u32>, start: usize, stride: usize) {
     for y in 0..h {
         let offset = start + y*stride;

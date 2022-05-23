@@ -1,6 +1,5 @@
 todo:
 - clean up:
-    - cubic thing.
     - basic types in lib.
     - at_least/at_most.
     - core::arch based simd abstractions.

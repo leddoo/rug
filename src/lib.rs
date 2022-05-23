@@ -1,7 +1,6 @@
-#![no_std]
+//#![no_std]
 #![feature(allocator_api)]
 #![feature(portable_simd)]
-#![feature(core_intrinsics)]
 
 pub mod float;
 pub mod wide;
