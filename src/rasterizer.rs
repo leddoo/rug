@@ -348,6 +348,10 @@ impl<'a> Rasterizer<'a> {
         quadratic: Quadratic,
         tolerance_squared: f32, max_recursion: u32
     ) {
+        if self.is_invisible(quadratic.aabb()) {
+            return;
+        }
+
         if self.are_bounded(&[ quadratic.p0, quadratic.p1, quadratic.p2]) {
             let mut f = |p0, p1, _| {
                 unsafe { self.add_segment_bounded(p0, p1) };
@@ -375,6 +379,10 @@ impl<'a> Rasterizer<'a> {
 
 
     pub fn add_cubic(&mut self, cubic: Cubic) {
+        if self.is_invisible(cubic.aabb()) {
+            return;
+        }
+
         let tol = self.flatten_tolerance.squared();
         let rec = self.flatten_recursion;
         let mut f = |p0, p1, _| {
