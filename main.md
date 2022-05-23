@@ -1,9 +1,22 @@
 todo:
-- try simd for computing add_segment_clamped parameters.
-    - could also precompute params for last add_delta call -> optimize for 0 step segments.
-- 4 wide fill_mask.
-- align rasterizer mask.
-- aabb rejection.
+- clean up:
+    - cubic thing.
+    - (basic) aabb rejection.
+    - basic types in lib.
+    - at_least/at_most.
+    - core::arch based simd abstractions.
+    - rasterizer interface.
+    - simplify stroker (single path walk).
+- features:
+    - circular & elliptic arcs.
+    - stroke: round, miter, square.
+- optimization:
+    - 4 wide fill_mask.
+    - align rasterizer mask.
+    - large paths.
+    - segment batching.
+
+stuff:
 - multi-threading.
 - path transforming.
     - stroking?

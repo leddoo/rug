@@ -31,7 +31,6 @@ dependencies = [
  "roxmltree",
  "rug",
  "svgtypes",
- "ttf-parser",
  "windows",
 ]
 
@@ -49,12 +48,6 @@ checksum = "dabb3eb59a457c56d5282ab4545609e2cc382b41f6af239bb8d59a7267ef94b3"
 dependencies = [
  "siphasher",
 ]
-
-[[package]]
-name = "ttf-parser"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c74c96594835e10fa545e2a51e8709f30b173a092bfd6036ef2cec53376244f3"
 
 [[package]]
 name = "windows"
