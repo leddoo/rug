@@ -376,15 +376,16 @@ impl Cubic {
             goal: find maximum t for which error of mid-point approximation of
             first segment is within tolerance.
 
-            control points of first segment:
+            control points of first segment (split at t):
                 l0 = p0
-                l1 = (1-s)*p0 + s*p1
-                l2 = (1-s)^2*p0 + 2*(1-s)s*p1 + s^2*p2
-                l3 = (1-s)^3*p0 + 3*(1-s)^2s*p1 + 3*(1-s)s^2*p2 + s^3*p3
+                l1 = (1-t)*p0 + t*p1
+                l2 = (1-t)^2*p0 + 2*(1-t)t*p1 + t^2*p2
+                l3 = (1-t)^3*p0 + 3*(1-t)^2t*p1 + 3*(1-t)t^2*p2 + t^3*p3
 
             max error is (wolfram alpha):
-                max_err = s^3 * sqrt(3)/36 * (3(p1 - p2) + (p3 - p0)).length()
-                        = s^3 * max-err-of-mid-point-approx-of-original-cubic
+                # TODO: explain what's put into wolfram alpha.
+                max_err = t^3 * sqrt(3)/36 * (3(p1 - p2) + (p3 - p0)).length()
+                        = t^3 * max-err-of-mid-point-approx-of-original-cubic
 
             now solve `max_err <= tolerance` to get the split point.
         #
@@ -416,8 +417,9 @@ impl Cubic {
         }
         else {
             // solve t^3 * sqrt(err_sq) = sqrt(tolerance_squared)
-            //       t^5 = tolerance_squared / err_sq
-            let split = (tolerance_squared / err_sq).pow(1.0/5.0);
+            //       t^6 = tolerance_squared / err_sq
+            // experimentally, 1/12 is the best. weird. TODO: investigate.
+            let split = (tolerance_squared / err_sq).pow(1.0/12.0);
 
             if split < 0.5 {
                 // we can use symmetry to split twice!
