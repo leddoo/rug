@@ -308,7 +308,7 @@ fn _render_svg(svg: &Svg, w: u32, h: u32, output: &mut Vec<u32>) {
     let tile_count = (tiles_x * tiles_y) as usize;
 
     let mut paths = 0;
-    let mut pixels = 0;
+    let mut fragments = 0;
 
     let t0 = std::time::Instant::now();
 
@@ -383,7 +383,7 @@ fn _render_svg(svg: &Svg, w: u32, h: u32, output: &mut Vec<u32>) {
                         SvgCommand::Fill (path, color) => {
                             if let Some((offset, mask)) = rasterize_fill(tile, path) {
                                 paths += 1;
-                                pixels += (mask.width() * mask.height()) as usize;
+                                fragments += (mask.width() * mask.height()) as usize;
                                 fill_mask(&mut tile_target, offset, &mask, *color);
                             }
                         },
@@ -391,7 +391,7 @@ fn _render_svg(svg: &Svg, w: u32, h: u32, output: &mut Vec<u32>) {
                         SvgCommand::Stroke (path, color, width) => {
                             if let Some((offset, mask)) = rasterize_stroke(tile, path, *width) {
                                 paths += 1;
-                                pixels += (mask.width() * mask.height()) as usize;
+                                fragments += (mask.width() * mask.height()) as usize;
                                 fill_mask(&mut tile_target, offset, &mask, *color);
                             }
                         },
@@ -408,17 +408,24 @@ fn _render_svg(svg: &Svg, w: u32, h: u32, output: &mut Vec<u32>) {
     }
 
 
-    let dt = t0.elapsed();
-    let dt_path = dt.as_secs_f32() * 1000.0 * 1000.0 / paths as f32;
-    let dt_pix = dt.as_secs_f32() * 1000.0 * 1000.0 * 1000.0 / pixels as f32;
-    let size = (tile_target.stride() * tile_target.height() as usize) * core::mem::size_of::<[F32x8; 4]>();
-
     if 1==1 {
-        println!("{}x{}, {} kiB", w, h, size / 1024);
-        println!("{} paths in {:.2?}", paths, dt);
-        println!("{:.2?}us per path", dt_path);
-        println!("{:.2?}ns per pixel", dt_pix);
-        println!("{} pixels per path", pixels / paths);
+        let dt = t0.elapsed();
+        let size = (tile_target.stride() * tile_target.height() as usize) * core::mem::size_of::<[F32x8; 4]>();
+        let pixels = w*h;
+        let dt_path = dt.as_secs_f32() * 1000.0 * 1000.0 / paths as f32;
+        let dt_frag = dt.as_secs_f32() * 1000.0 * 1000.0 * 1000.0 / fragments as f32;
+        let dt_pix = dt.as_secs_f32() * 1000.0 * 1000.0 * 1000.0 / pixels as f32;
+
+        print!("{}x{}, {} kiB\n", w, h, size / 1024);
+        print!("{} paths in {:.2?}\n", paths, dt);
+        print!("{:.2?}us per path\n", dt_path);
+        print!("{:.2?}ns per fragment\n", dt_frag);
+        print!("{:.2?}ns per pixel\n", dt_pix);
+        print!("{} fragments\n", fragments);
+        print!("{} pixels\n", pixels);
+        print!("{:.2} frags/pixel\n", fragments as f32 / pixels as f32);
+        print!("{:.2} frags/path\n", fragments as f32 / paths as f32);
+        println!();
     }
 }
 
