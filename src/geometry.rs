@@ -1,5 +1,6 @@
+use crate::basic::*;
 use crate::float::*;
-use crate::wide::*;
+use crate::simd::*;
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -27,12 +28,12 @@ impl Rect {
 
     #[inline(always)]
     pub fn contains(&self, p: F32x2) -> bool {
-        p.ge(self.min).all() && p.lt(self.max).all()
+        p.lanes_ge(self.min).all() && p.lanes_lt(self.max).all()
     }
 
     #[inline(always)]
     pub fn contains_inclusive(&self, p: F32x2) -> bool {
-        p.ge(self.min).all() && p.le(self.max).all()
+        p.lanes_ge(self.min).all() && p.lanes_le(self.max).all()
     }
 
     #[inline(always)]
@@ -49,10 +50,10 @@ impl Rect {
     }
 
     #[inline(always)]
-    pub fn round_inclusive_fast(self) -> Rect {
+    pub unsafe fn round_inclusive_unck(self) -> Rect {
         rect(
-            self.min.floor_fast(),
-            self.max.ceil_fast(),
+            self.min.floorf_unck(),
+            self.max.ceilf_unck(),
         )
     }
 
@@ -87,12 +88,12 @@ pub fn segment(p0: F32x2, p1: F32x2) -> Segment {
 impl Segment {
     #[inline(always)]
     pub fn normal(self, tolerance_squared: F32) -> Option<F32x2> {
-        (self.p1 - self.p0).normal(tolerance_squared)
+        (self.p1 - self.p0).left_normal(tolerance_squared)
     }
 
     #[inline(always)]
     pub fn offset(self, normal: F32x2, distance: F32) -> Segment {
-        self + distance*normal
+        self + F32x2::splat(distance)*normal
     }
 
     #[inline(always)]
@@ -133,16 +134,16 @@ pub fn quadratic(p0: F32x2, p1: F32x2, p2: F32x2) -> Quadratic {
 impl Quadratic {
     #[inline(always)]
     pub fn eval(self, t: F32) -> F32x2 {
-        let l10 = self.p0.lerp(self.p1, t);
-        let l11 = self.p1.lerp(self.p2, t);
-        l10.lerp(l11, t)
+        let l10 = self.p0.lerpf(self.p1, t);
+        let l11 = self.p1.lerpf(self.p2, t);
+        l10.lerpf(l11, t)
     }
 
     #[inline(always)]
     pub fn split(self, t: F32) -> (Quadratic, Quadratic) {
-        let l10 = self.p0.lerp(self.p1, t);
-        let l11 = self.p1.lerp(self.p2, t);
-        let l20 = l10.lerp(l11, t);
+        let l10 = self.p0.lerpf(self.p1, t);
+        let l11 = self.p1.lerpf(self.p2, t);
+        let l20 = l10.lerpf(l11, t);
         (quadratic(self.p0, l10, l20), quadratic(l20, l11, self.p2))
     }
 
@@ -155,7 +156,7 @@ impl Quadratic {
             err = length(p1/2 - (p0 + p2)/4)
                 = length(p1*2/4 - (p0 + p2)/4)
                 = 1/2 * length(2*p1 - (p0 + p2)) */
-        let err_sq = 0.25 * (2.0*self.p1 - (self.p0 + self.p2)).length_squared();
+        let err_sq = 0.25 * (F32x2::splat(2.0)*self.p1 - (self.p0 + self.p2)).length_squared();
 
         if max_recursion == 0 || err_sq < tolerance_squared {
             f(self.p0, self.p2, max_recursion)
@@ -170,8 +171,8 @@ impl Quadratic {
 
     #[inline(always)]
     pub fn normals(self, tolerance_squared: F32) -> (Option<F32x2>, Option<F32x2>) {
-        ((self.p1 - self.p0).normal(tolerance_squared),
-         (self.p2 - self.p1).normal(tolerance_squared))
+        ((self.p1 - self.p0).left_normal(tolerance_squared),
+         (self.p2 - self.p1).left_normal(tolerance_squared))
     }
 
     pub fn offset<F: FnMut(Quadratic, u32)>(
@@ -185,19 +186,20 @@ impl Quadratic {
 
         // TODO: understand & explain.
         let n1 = n0 + n2;
-        let n1 = 2.0 * n1/n1.dot(n1);
+        let n1 = F32x2::splat(2.0) * n1/F32x2::splat(n1.dot(n1));
 
+        let d = F32x2::splat(distance);
         let approx =
             quadratic(
-                self.p0 + distance*n0,
-                self.p1 + distance*n1,
-                self.p2 + distance*n2,
+                self.p0 + d*n0,
+                self.p1 + d*n1,
+                self.p2 + d*n2,
             );
 
         let mid = self.eval(0.5);
-        let n_mid = (self.p2 - self.p0).normal_unck();
+        let n_mid = (self.p2 - self.p0).left_normal_unck();
 
-        let expected = mid + distance*n_mid;
+        let expected = mid + d*n_mid;
         let actual   = approx.eval(0.5);
 
         // TODO: keep this? (ensures (p2 - p0) is large enough in the recursive calls)
@@ -256,12 +258,12 @@ pub fn cubic(p0: F32x2, p1: F32x2, p2: F32x2, p3: F32x2) -> Cubic {
 
 impl Cubic {
     pub fn split(self, t: f32) -> (Cubic, Cubic) {
-        let l10 = self.p0.lerp(self.p1, t);
-        let l11 = self.p1.lerp(self.p2, t);
-        let l12 = self.p2.lerp(self.p3, t);
-        let l20 = l10.lerp(l11, t);
-        let l21 = l11.lerp(l12, t);
-        let l30 = l20.lerp(l21, t);
+        let l10 = self.p0.lerpf(self.p1, t);
+        let l11 = self.p1.lerpf(self.p2, t);
+        let l12 = self.p2.lerpf(self.p3, t);
+        let l20 = l10.lerpf(l11, t);
+        let l21 = l11.lerpf(l12, t);
+        let l30 = l20.lerpf(l21, t);
         (cubic(self.p0, l10, l20, l30), cubic(l30, l21, l12, self.p3))
     }
 
@@ -398,7 +400,7 @@ impl Cubic {
     pub fn approx_quad(self) -> Quadratic {
         quadratic(
             self.p0,
-            0.25*3.0*(self.p1 + self.p2) - 0.25*(self.p0 + self.p3),
+            F32x2::splat(0.25*3.0)*(self.p1 + self.p2) - F32x2::splat(0.25)*(self.p0 + self.p3),
             self.p3)
     }
 
@@ -410,7 +412,7 @@ impl Cubic {
         let Cubic {p0, p1, p2, p3} = self;
 
         let scale: f32 = 0.0481125224324688137090957317; // sqrt(3)/36
-        let err_sq = scale * (3.0*(p1 - p2) + (p3 - p0)).length_squared();
+        let err_sq = scale * (F32x2::splat(3.0)*(p1 - p2) + (p3 - p0)).length_squared();
 
         if max_recursion == 0 || err_sq < tolerance_squared {
             f(self.approx_quad(), max_recursion);

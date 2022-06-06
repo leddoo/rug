@@ -1,18 +1,16 @@
 todo:
 - clean up:
-    - basic types in lib.
-    - at_least/at_most.
-    - core::arch based simd abstractions.
+    - get rid of `crate::float`? or at least make it fast.
     - rasterizer interface.
     - simplify stroker (single path walk).
+- optimization:
+    - segment batching.
+    - try 4 wide fill_mask.
+    - align rasterizer mask.
+    - large paths.
 - features:
     - circular & elliptic arcs.
     - stroke: round, miter, square.
-- optimization:
-    - 4 wide fill_mask.
-    - align rasterizer mask.
-    - large paths.
-    - segment batching.
 
 stuff:
 - multi-threading.

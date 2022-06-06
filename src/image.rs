@@ -5,7 +5,7 @@ use alloc::{
     vec::Vec,
 };
 
-use crate::wide::*;
+use crate::simd::*;
 
 
 pub type Mask<'a>   = Image_a_f32<'a>;
@@ -206,26 +206,21 @@ pub fn argb_u8x8_unpack(v: U32x8) -> (F32x8, F32x8, F32x8, F32x8) {
     let a = (v >> U32x8::splat(24)) & mask;
 
     let scale = F32x8::splat(255.0);
-    (F32x8(r.cast()) / scale,
-     F32x8(g.cast()) / scale,
-     F32x8(b.cast()) / scale,
-     F32x8(a.cast()) / scale)
+    (r.as_i32().to_f32() / scale,
+     g.as_i32().to_f32() / scale,
+     b.as_i32().to_f32() / scale,
+     a.as_i32().to_f32() / scale)
 }
 
 #[inline(always)]
 pub unsafe fn argb_u8x8_pack_clamped_255(v: (F32x8, F32x8, F32x8, F32x8)) -> U32x8 {
-    #[inline(always)]
-    unsafe fn to_int(v: F32x8) -> U32x8 {
-        core::mem::transmute(v.0.to_int_unchecked::<i32>())
-    }
-
     let (r, g, b, a) = v;
 
-    let b = to_int(b);
-    let g = to_int(g) << U32x8::splat(8);
-    let r = to_int(r) << U32x8::splat(16);
-    let a = to_int(a) << U32x8::splat(24);
-    a | r | g | b
+    let b = b.to_i32_unck();
+    let g = g.to_i32_unck() << I32x8::splat(8);
+    let r = r.to_i32_unck() << I32x8::splat(16);
+    let a = a.to_i32_unck() << I32x8::splat(24);
+    (a | r | g | b).as_u32()
 }
 
 #[inline(always)]

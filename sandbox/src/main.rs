@@ -14,9 +14,9 @@ fn main() {
         };
 
         let mut image = vec![];
-        for _ in 0..10 {
-            _render_svg(&svg, 2560, 1440, &mut image);
-            //_render_svg(&svg, 1024, 1024, &mut image);
+        for _ in 0..50 {
+            //_render_svg(&svg, 2560, 1440, &mut image);
+            _render_svg(&svg, 1024, 1024, &mut image);
             //_render_svg(&svg, 512, 512, &mut image);
             //break;
         }
@@ -251,7 +251,7 @@ fn parse_xml(xml: &str) -> Svg<'static> {
 
 
 fn rasterize_fill(tile: Rect, path: &Path) -> Option<(U32x2, Mask<'static>)> {
-    let mask_aabb = path.aabb.clamp_to(tile).round_inclusive_fast();
+    let mask_aabb = unsafe { path.aabb.clamp_to(tile).round_inclusive_unck() };
 
     let mask_w = mask_aabb.width()  as u32;
     let mask_h = mask_aabb.height() as u32;
@@ -264,13 +264,13 @@ fn rasterize_fill(tile: Rect, path: &Path) -> Option<(U32x2, Mask<'static>)> {
     let mut r = Rasterizer::new(mask_w, mask_h);
     r.fill_path(path, p0);
 
-    let offset = (p0 - tile.min).0.cast();
+    let offset = (p0 - tile.min).to_i32().as_u32();
     Some((offset, r.accumulate()))
 }
 
 fn rasterize_stroke(tile: Rect, path: &Path, width: F32) -> Option<(U32x2, Mask<'static>)> {
     let path_aabb = path.aabb.grow(F32x2::splat(width/2.0));
-    let mask_aabb = path_aabb.clamp_to(tile).round_inclusive_fast();
+    let mask_aabb = unsafe { path_aabb.clamp_to(tile).round_inclusive_unck() };
 
     let mask_w = mask_aabb.width()  as u32;
     let mask_h = mask_aabb.height() as u32;
@@ -283,7 +283,7 @@ fn rasterize_stroke(tile: Rect, path: &Path, width: F32) -> Option<(U32x2, Mask<
     let mut r = Rasterizer::new(mask_w, mask_h);
     r.stroke_path(path, width/2.0, width/2.0, p0);
 
-    let offset = (p0 - tile.min).0.cast();
+    let offset = (p0 - tile.min).to_i32().as_u32();
     Some((offset, r.accumulate()))
 }
 
@@ -327,9 +327,9 @@ fn _render_svg(svg: &Svg, w: u32, h: u32, output: &mut Vec<u32>) {
 
             let tile_size = F32x2::splat(tile_size as F32);
             let rect = rect(path_aabb.min / tile_size, path_aabb.max / tile_size);
-            let rect = rect.round_inclusive_fast();
-            let begin: U32x2 = rect.min.clamp(F32x2::zero(), tiles_end).0.cast();
-            let end:   U32x2 = rect.max.clamp(F32x2::zero(), tiles_end).0.cast();
+            let rect = unsafe { rect.round_inclusive_unck() };
+            let begin = unsafe { rect.min.clamp(F32x2::ZERO, tiles_end).to_i32_unck().as_u32() };
+            let end   = unsafe { rect.max.clamp(F32x2::ZERO, tiles_end).to_i32_unck().as_u32() };
 
             for y in begin[1]..end[1] {
                 for x in begin[0]..end[0] {

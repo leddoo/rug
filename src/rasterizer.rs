@@ -1,8 +1,9 @@
 extern crate alloc;
 use alloc::alloc::*;
 
+use crate::basic::*;
 use crate::float::*;
-use crate::wide::*;
+use crate::simd::*;
 use crate::geometry::*;
 use crate::path::*;
 use crate::image::{Mask};
@@ -71,7 +72,7 @@ impl<'a> Rasterizer<'a> {
 
         for y in 0..h {
 
-            let mut c = F32x4::zero();
+            let mut c = F32x4::ZERO;
 
             let aligned_w = w/4*4;
 
@@ -82,7 +83,7 @@ impl<'a> Rasterizer<'a> {
                 d = d + shift::<8>(d);
                 c = c + d;
 
-                deltas.write4(x, y, c.abs_fast().min_fast(F32x4::splat(1.0)));
+                deltas.write4(x, y, c.abs().at_mostf(F32x4::splat(1.0)));
 
                 c = F32x4::splat(c[3]);
 
@@ -90,9 +91,8 @@ impl<'a> Rasterizer<'a> {
                 #[inline(always)]
                 fn shift<const AMOUNT: i32>(v: F32x4) -> F32x4 { unsafe {
                     use core::arch::x86_64::*;
-                    let m128: __m128i = v.0.to_bits().into();
-                    let m128 = _mm_slli_si128::<AMOUNT>(m128);
-                    F32x4(core::simd::f32x4::from_bits(m128.into()))
+                    let m128 = _mm_slli_si128::<AMOUNT>(v.to_bits().into());
+                    F32x4::from_bits(m128.into())
                 }}
             }
 
@@ -430,10 +430,10 @@ impl<'a> Rasterizer<'a> {
             let mut stroker = Stroker {
                 closed:            false,
                 has_prev:          false,
-                prev_end:          F32x2::zero(),
+                prev_end:          F32x2::ZERO,
                 has_first:         false,
-                first_left:        F32x2::zero(),
-                first_right:       F32x2::zero(),
+                first_left:        F32x2::ZERO,
+                first_right:       F32x2::ZERO,
                 tolerance_squared: self.flatten_tolerance.squared(),
                 max_recursion:     self.flatten_recursion,
                 distance:          left,
@@ -525,12 +525,12 @@ impl<'a> Rasterizer<'a> {
 
     #[inline(always)]
     pub fn is_invisible(&self, aabb: Rect) -> Bool {
-        aabb.min.ge(self.size).any() || aabb.max.y() <= 0.0
+        aabb.min.lanes_ge(self.size).any() || aabb.max.y() <= 0.0
     }
 
     #[inline(always)]
     pub fn is_bounded(&self, p0: F32x2) -> Bool {
-        let safe_rect = rect(F32x2::zero(), self.safe_size);
+        let safe_rect = rect(F32x2::ZERO, self.safe_size);
         safe_rect.contains(p0)
     }
 
@@ -564,27 +564,28 @@ impl<'r, 'a> Stroker<'r, 'a> {
     }
 
     fn _cap(&mut self, p0: F32x2, normal: F32x2) {
+        let d = F32x2::splat(self.distance);
         // closed paths are joined; open paths get caps.
         if self.closed {
             if !self.has_first {
                 // remember end points during left offset.
                 self.has_first   = true;
-                self.first_left  = p0 + self.distance*normal;
-                self.first_right = p0 - self.distance*normal;
+                self.first_left  = p0 + d*normal;
+                self.first_right = p0 - d*normal;
             }
             else {
                 // draw join during right offset.
                 self.has_first = false;
-                let left  = p0 + self.distance*normal;
-                let right = p0 - self.distance*normal;
+                let left  = p0 + d*normal;
+                let right = p0 - d*normal;
                 self.rasterizer.add_segment_p(right, self.first_left);
                 self.rasterizer.add_segment_p(self.first_right, left);
             }
         }
         else {
             // butt cap.
-            let left  = p0 + self.distance*normal;
-            let right = p0 - self.distance*normal;
+            let left  = p0 + d*normal;
+            let right = p0 - d*normal;
             self.rasterizer.add_segment_p(right, left);
         }
     }
@@ -593,7 +594,7 @@ impl<'r, 'a> Stroker<'r, 'a> {
     fn join(&mut self, p0: F32x2, normal: F32x2) {
         if self.has_prev {
             // bevel join.
-            self.rasterizer.add_segment_p(self.prev_end, p0 + self.distance*normal);
+            self.rasterizer.add_segment_p(self.prev_end, p0 + F32x2::splat(self.distance)*normal);
         }
     }
 
@@ -617,7 +618,7 @@ impl<'r, 'a> Stroker<'r, 'a> {
         if self.distance != 0.0 {
             self.join(segment.p0, normal);
             self.rasterizer.add_segment(segment.offset(normal, self.distance));
-            self.set_end(segment.p1 + self.distance*normal);
+            self.set_end(segment.p1 + F32x2::splat(self.distance)*normal);
         }
         else {
             self.rasterizer.add_segment(segment);
@@ -654,7 +655,7 @@ impl<'r, 'a> Stroker<'r, 'a> {
                     };
                     quadratic.offset(&mut f, n0, n1, self.distance, tol, rec);
 
-                    self.set_end(quadratic.p2 + self.distance*n1);
+                    self.set_end(quadratic.p2 + F32x2::splat(self.distance)*n1);
                 }
                 else {
                     self.rasterizer.add_quadratic_tol_rec(quadratic, tolerance_squared, max_recursion);

@@ -5,7 +5,8 @@ use alloc::{
     vec::Vec,
 };
 
-use crate::wide::*;
+use crate::basic::*;
+use crate::simd::*;
 use crate::geometry::*;
 
 
@@ -58,7 +59,7 @@ impl<'p, 'a> Iter<'p, 'a> {
             path,
             verb:  0,
             point: 0,
-            p0:    F32x2::zero(),
+            p0:    F32x2::ZERO,
         }
     }
 
@@ -149,7 +150,7 @@ impl<'a> PathBuilder<'a> {
             points: Vec::new_in(allocator),
             aabb:   rect(F32x2::splat(f32::MAX), F32x2::splat(f32::MIN)),
             in_path:     false,
-            begin_point: F32x2::zero(),
+            begin_point: F32x2::ZERO,
             begin_verb:  usize::MAX,
         }
     }

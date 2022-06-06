@@ -1,4 +1,4 @@
-use crate::wide::*;
+use crate::simd::*;
 use crate::image::*;
 
 
@@ -32,7 +32,7 @@ pub fn fill_mask(target: &mut Target, offset: U32x2, mask: &Mask, color: F32x4) 
                     let x0 = mask_x0.max(0) as usize;
                     let x1 = mask_x1.min(mask_width) as usize;
 
-                    let mut coverage = F32x8::zero();
+                    let mut coverage = F32x8::ZERO;
                     for x in x0..x1 {
                         coverage[x - x0 + dx] = mask[(x, mask_y)];
                     }
@@ -44,10 +44,10 @@ pub fn fill_mask(target: &mut Target, offset: U32x2, mask: &Mask, color: F32x4) 
 
             let p = (u as usize, y as usize);
 
-            if coverage.lt(F32x8::splat(0.5/255.0)).all() {
+            if coverage.lanes_lt(F32x8::splat(0.5/255.0)).all() {
                 continue;
             }
-            if color[3] == 1.0 && coverage.gt(F32x8::splat(254.5/255.0)).all() {
+            if color[3] == 1.0 && coverage.lanes_gt(F32x8::splat(254.5/255.0)).all() {
                 target[p] = (
                     F32x8::splat(color[0]),
                     F32x8::splat(color[1]),
