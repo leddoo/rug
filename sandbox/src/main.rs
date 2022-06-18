@@ -260,41 +260,37 @@ fn parse_xml(xml: &str) -> Svg<'static> {
 }
 
 
-fn rasterize_fill(tile: Rect, path: &Path) -> Option<(U32x2, Mask<'static>)> {
-    let mask_aabb = unsafe { path.aabb.clamp_to(tile).round_inclusive_unck() };
+fn rasterize<F: FnOnce(F32x2, &mut Rasterizer)>(tile: Rect, aabb: Rect, f: F) -> Option<(U32x2, Mask<'static>)> {
+    let aabb = unsafe { aabb.clamp_to(tile).round_inclusive_unck() };
 
-    let mask_w = mask_aabb.width()  as u32;
-    let mask_h = mask_aabb.height() as u32;
+    const N: usize = Target::simd_width();
+    const NF32: f32 = N as F32;
+
+    let x0 = floor_fast(aabb.min.x() / NF32) * NF32;
+    let x1 = ceil_fast(aabb.max.x() / NF32)  * NF32;
+
+    let mask_w = (x1 - x0)     as U32;
+    let mask_h = aabb.height() as U32;
     if mask_w == 0 || mask_h == 0 {
         return None;
     }
 
-    let p0 = mask_aabb.min;
+    let p0 = F32x2::new(x0, aabb.min.y());
 
     let mut r = Rasterizer::new(mask_w, mask_h);
-    r.fill_path(path, p0);
+    f(p0, &mut r);
 
     let offset = (p0 - tile.min).to_i32().as_u32();
     Some((offset, r.accumulate()))
 }
 
+fn rasterize_fill(tile: Rect, path: &Path) -> Option<(U32x2, Mask<'static>)> {
+    rasterize(tile, path.aabb, |p0, r| r.fill_path(path, p0))
+}
+
 fn rasterize_stroke(tile: Rect, path: &Path, width: F32) -> Option<(U32x2, Mask<'static>)> {
-    let path_aabb = path.aabb.grow(F32x2::splat(width/2.0));
-    let mask_aabb = unsafe { path_aabb.clamp_to(tile).round_inclusive_unck() };
-
-    let mask_w = mask_aabb.width()  as u32;
-    let mask_h = mask_aabb.height() as u32;
-    if mask_w == 0 || mask_h == 0 {
-        return None;
-    }
-
-    let p0 = mask_aabb.min;
-
-    let mut r = Rasterizer::new(mask_w, mask_h);
-    r.stroke_path(path, width/2.0, width/2.0, p0);
-
-    let offset = (p0 - tile.min).to_i32().as_u32();
-    Some((offset, r.accumulate()))
+    rasterize(tile, path.aabb.grow(F32x2::splat(width/2.0)), |p0, r|
+        r.stroke_path(path, width/2.0, width/2.0, p0))
 }
 
 
@@ -310,7 +306,7 @@ fn _render_svg(svg: &Svg, w: u32, h: u32, output: &mut Vec<u32>) {
     output.reserve((w*h) as usize);
     unsafe { output.set_len((w*h) as usize) };
 
-    let tile_size = 165;
+    let tile_size = 160;
     let mut tile_target = Target::new(tile_size, tile_size);
 
     let tiles_x = (w + tile_size - 1) / tile_size;

@@ -15,35 +15,19 @@ pub fn fill_mask(target: &mut Target, offset: U32x2, mask: &Mask, color: F32x4) 
     let begin = offset;
     let end   = (offset + mask.bounds()).min(bounds);
 
-    let mask_width = mask.width() as i32;
+    let u0 = begin[0] / N32;
+    let u1 = end[0]   / N32;
+    assert!(u0 * N32 == begin[0]);
+    assert!(u1 * N32 == end[0]);
 
     for y in begin[1] .. end[1] {
-        let u0 = begin[0] / N32;
-        let u1 = (end[0] + N32-1) / N32;
 
         for u in u0..u1 {
             let x = u * N32;
-
-            let mask_x0 = x as i32 - begin[0] as i32;
-            let mask_x1 = mask_x0 + N as i32;
-
+            let mask_x = (x - begin[0]) as usize;
             let mask_y = (y - begin[1]) as usize;
 
-            let coverage =
-                if mask_x0 < 0 || mask_x1 > mask_width {
-                    let dx = (-mask_x0).max(0) as usize;
-                    let x0 = mask_x0.max(0) as usize;
-                    let x1 = mask_x1.min(mask_width) as usize;
-
-                    let mut coverage = <F32x<N>>::ZERO;
-                    for x in x0..x1 {
-                        coverage[x - x0 + dx] = mask[(x, mask_y)];
-                    }
-                    coverage
-                }
-                else {
-                    mask.read(mask_x0 as usize, mask_y)
-                };
+            let coverage = mask.read(mask_x, mask_y);
 
             let p = (u as usize, y as usize);
 

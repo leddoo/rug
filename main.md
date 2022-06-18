@@ -19,7 +19,6 @@ todo:
 - simplify stroker (single path walk).
 
 optimization:
-- align rasterizer mask.
 - large paths.
     - accumulate_runs.
     - fill_mask: remove alpha pruning, solid fill only for runs (accumulate_runs makes sure runs are long enough).
