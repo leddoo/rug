@@ -13,13 +13,20 @@ fn main() {
             parse_xml(core::str::from_utf8(file).unwrap())
         };
 
+        let iters = 50;
+        let t0 = std::time::Instant::now();
+
         let mut image = vec![];
-        for _ in 0..50 {
+        for _ in 0..iters {
             //_render_svg(&svg, 2560, 1440, &mut image);
+            //_render_svg(&svg, 2048, 2048, &mut image);
             _render_svg(&svg, 1024, 1024, &mut image);
             //_render_svg(&svg, 512, 512, &mut image);
             //break;
         }
+
+        println!("{:?}", t0.elapsed() / iters);
+
         win32::exit();
     }
 
@@ -74,6 +81,7 @@ struct Svg<'a> {
 }
 
 
+#[inline(never)]
 fn target_to_argb_at(target: &Target, w: usize, h: usize, output: &mut Vec<u32>, start: usize, stride: usize) {
     for y in 0..h {
         let offset = start + y*stride;

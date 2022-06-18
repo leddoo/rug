@@ -94,7 +94,7 @@ macro_rules! image_impl_index {
 
 #[allow(non_camel_case_types)]
 pub struct Image_a_f32<'a> {
-    data:   Box<[f32], &'a dyn Allocator>,
+    pub(crate) data: Box<[f32], &'a dyn Allocator>,
     bounds: U32x2,
     stride: usize,
 }

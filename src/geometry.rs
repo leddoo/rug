@@ -411,6 +411,8 @@ impl Cubic {
     {
         let Cubic {p0, p1, p2, p3} = self;
 
+        // TODO: this should be squared, i think.
+        // maybe that's why pow 1/12 is better.
         let scale: f32 = 0.0481125224324688137090957317; // sqrt(3)/36
         let err_sq = scale * (F32x2::splat(3.0)*(p1 - p2) + (p3 - p0)).length_squared();
 

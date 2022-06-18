@@ -14,6 +14,7 @@ pub const ZERO_TOLERANCE:    f32 = 0.001;
 pub const FLATTEN_TOLERANCE: f32 = 0.1;
 pub const FLATTEN_RECURSION: u32 = 16;
 
+const BUFFER_SIZE: usize = 32;
 
 pub struct Rasterizer<'a> {
     pub flatten_tolerance: f32,
@@ -21,6 +22,9 @@ pub struct Rasterizer<'a> {
     deltas: Mask<'a>,
     size: F32x2,
     safe_size: F32x2,
+    deltas_len: I32,
+    buffer: [[F32x2; 2]; BUFFER_SIZE],
+    buffered: usize,
 }
 
 
@@ -31,12 +35,17 @@ impl<'a> Rasterizer<'a> {
 
     pub fn new_in(width: u32, height: u32, allocator: &'a dyn Allocator) -> Rasterizer<'a> {
         let size = F32x2::new(width as f32, height as f32);
+        let deltas = Mask::new_in(width + 2, height + 1, allocator);
+        let deltas_len = deltas.data.len().try_into().unwrap();
         Rasterizer {
             flatten_tolerance: FLATTEN_TOLERANCE,
             flatten_recursion: FLATTEN_RECURSION,
-            deltas: Mask::new_in(width + 2, height + 1, allocator),
+            deltas,
             size: size,
             safe_size: size + F32x2::splat(0.9),
+            deltas_len,
+            buffer: [[F32x2::ZERO; 2]; BUFFER_SIZE],
+            buffered: 0,
         }
     }
 
@@ -45,7 +54,11 @@ impl<'a> Rasterizer<'a> {
 
 
     #[cfg(not(target_arch = "x86_64"))]
-    pub fn accumulate(self) -> Mask<'a> {
+    pub fn accumulate(mut self) -> Mask<'a> {
+        if self.buffered > 0 {
+            self.flush();
+        }
+
         let w = self.width() as usize;
         let h = self.height() as usize;
 
@@ -64,7 +77,11 @@ impl<'a> Rasterizer<'a> {
     }
 
     #[cfg(target_arch = "x86_64")]
-    pub fn accumulate(self) -> Mask<'a> {
+    pub fn accumulate(mut self) -> Mask<'a> {
+        if self.buffered > 0 {
+            self.flush();
+        }
+
         let w = self.width() as usize;
         let h = self.height() as usize;
 
@@ -108,108 +125,165 @@ impl<'a> Rasterizer<'a> {
     }
 
 
+    #[inline(always)]
     pub unsafe fn add_segment_bounded(&mut self, p0: F32x2, p1: F32x2) {
         debug_assert!(self.are_bounded(&[p0, p1]));
         //println!("Segment(({}, {}), ({}, {})),", p0.x(), p0.y(), p1.x(), p1.y());
         //println!("Vector(({}, {}), ({}, {})),", p0.x(), p0.y(), p1.x(), p1.y());
 
-        let stride = self.deltas.stride() as f32;
+        if self.buffered >= self.buffer.len() {
+            self.flush();
+        }
+        self.buffer[self.buffered][0] = p0;
+        self.buffer[self.buffered][1] = p1;
+        self.buffered += 1;
+    }
 
-        let x0 = p0[0];
-        let y0 = p0[1];
-        let x1 = p1[0];
-        let y1 = p1[1];
+    fn flush(&mut self) {
+        const WIDTH: usize = 4;
 
-        let dx = x1 - x0;
-        let dy = y1 - y0;
-        let dx_inv = 1.0.safe_div(dx, 1_000_000.0);
-        let dy_inv = 1.0.safe_div(dy, 1_000_000.0);
+        type F32v = F32x<WIDTH>;
+        type I32v = I32x<WIDTH>;
 
-        let x_step = 1f32.copysign(dx);
-        let y_step = 1f32.copysign(dy);
-        let x_nudge = if dx >= 0.0 { 0f32 } else { 1f32 };
-        let y_nudge = if dy >= 0.0 { 0f32 } else { 1f32 };
+        let batches = (self.buffered + WIDTH-1) / WIDTH;
+        assert!(4*batches*core::mem::size_of::<F32v>() <= core::mem::size_of_val(&self.buffer));
 
-        let x_dt = dx_inv.abs();
-        let y_dt = dy_inv.abs();
-
-        let x_i0 = floor_fast(x0);
-        let y_i0 = floor_fast(y0);
-        let x_i1 = floor_fast(x1);
-        let y_i1 = floor_fast(y1);
-
-        let x_steps = (x_i1 - x_i0).abs() as u32;
-        let y_steps = (y_i1 - y_i0).abs() as u32;
-        let steps = x_steps + y_steps;
-
-        let mut x_prev = x0;
-        let mut y_prev = y0;
-        let mut x_next = x_i0 + x_step + x_nudge;
-        let mut y_next = y_i0 + y_step + y_nudge;
-        let mut x_t_next = (x_next - x0) * dx_inv;
-        let mut y_t_next = (y_next - y0) * dy_inv;
-        let mut x_rem = x_steps;
-        let mut y_rem = y_steps;
-
-        let     row_delta = stride.copysign(dy) as i32;
-        let mut row_base  = (stride * y_i0) as i32;
-        let mut x_i = x_i0;
-
-        for _ in 0..steps {
-            let prev_base = row_base;
-            let prev_x_i  = x_i;
-            let x;
-            let y;
-            if (x_t_next <= y_t_next && x_rem > 0) || y_rem == 0 {
-                x = x_next;
-                y = y0 + x_t_next*dy;
-
-                x_next   += x_step;
-                x_t_next += x_dt;
-                x_i      += x_step;
-                x_rem    -= 1;
-            }
-            else {
-                x = x0 + y_t_next*dx;
-                y = y_next;
-
-                y_next   += y_step;
-                y_t_next += y_dt;
-                row_base += row_delta;
-                y_rem    -= 1;
-            }
-
-            //println!("Segment(({}, {}), ({}, {})),", x_prev, y_prev, x, y);
-            add_delta(self, prev_base as isize as usize, prev_x_i, x_prev, y_prev, x, y);
-
-            x_prev = x;
-            y_prev = y;
+        // zero out the extra segments, so we don't rasterize garbage.
+        for i in self.buffered .. batches * WIDTH {
+            self.buffer[i] = [F32x2::ZERO; 2]
         }
 
-        debug_assert!(x_rem == 0);
-        debug_assert!(row_base == (stride * y_i1) as i32);
-        debug_assert!(x_i == x_i1);
+        for batch in 0..batches {
+            let (x0, y0, x1, y1) = {
+                let buffer = self.buffer.as_ptr() as *const F32v;
 
-        //println!("Segment(({}, {}), ({}, {})),", x_prev, y_prev, x1, y1);
-        add_delta(self, row_base as isize as usize, x_i, x_prev, y_prev, x1, y1);
+                let x0y0x1y1_0 = unsafe { buffer.add(4*batch + 0).read_unaligned() };
+                let x0y0x1y1_1 = unsafe { buffer.add(4*batch + 1).read_unaligned() };
+                let x0y0x1y1_2 = unsafe { buffer.add(4*batch + 2).read_unaligned() };
+                let x0y0x1y1_3 = unsafe { buffer.add(4*batch + 3).read_unaligned() };
 
+                let (x0x1_0, y0y1_0) = x0y0x1y1_0.deinterleave(x0y0x1y1_1);
+                let (x0x1_1, y0y1_1) = x0y0x1y1_2.deinterleave(x0y0x1y1_3);
+                let (x0, x1) = x0x1_0.deinterleave(x0x1_1);
+                let (y0, y1) = y0y1_0.deinterleave(y0y1_1);
+                (x0, y0, x1, y1)
+            };
+
+            let stride = F32v::splat(self.deltas.stride() as f32);
+
+            let dx = x1 - x0;
+            let dy = y1 - y0;
+            let dx_inv = safe_div(F32v::ONE, dx, F32v::splat(1_000_000.0));
+            let dy_inv = safe_div(F32v::ONE, dy, F32v::splat(1_000_000.0));
+
+            let x_step = F32v::ONE.copysign(dx);
+            let y_step = F32v::ONE.copysign(dy);
+            let x_nudge = -dx.lanes_lt(F32v::ZERO).as_i32().to_f32();
+            let y_nudge = -dy.lanes_lt(F32v::ZERO).as_i32().to_f32();
+
+            let x_dt = dx_inv.abs();
+            let y_dt = dy_inv.abs();
+
+            let x_i0 = unsafe { x0.to_i32_unck().to_f32() };
+            let y_i0 = unsafe { y0.to_i32_unck().to_f32() };
+            let x_i1 = unsafe { x1.to_i32_unck().to_f32() };
+            let y_i1 = unsafe { y1.to_i32_unck().to_f32() };
+
+            let x_steps = unsafe { (x_i1 - x_i0).abs().to_i32_unck() };
+            let y_steps = unsafe { (y_i1 - y_i0).abs().to_i32_unck() };
+            let steps = x_steps + y_steps;
+            let max_steps = steps.reduce_max();
+
+            let mut x_prev = x0;
+            let mut y_prev = y0;
+            let mut x_next = x_i0 + x_step + x_nudge;
+            let mut y_next = y_i0 + y_step + y_nudge;
+            let mut x_t_next = (x_next - x0) * dx_inv;
+            let mut y_t_next = (y_next - y0) * dy_inv;
+            let mut x_rem = x_steps;
+            let mut y_rem = y_steps;
+
+            let row_delta = unsafe { stride.copysign(dy).to_i32_unck() };
+            let mut row_base = unsafe { (stride * y_i0).to_i32_unck() };
+            let mut x_i = x_i0;
+
+            for _ in 0..max_steps {
+                let prev_base = row_base;
+                let prev_x_i  = x_i;
+
+                let x_left = x_rem.lanes_gt(I32v::ZERO);
+                let y_left = y_rem.lanes_gt(I32v::ZERO);
+                let any_left = x_left | y_left;
+                let is_x = (x_t_next.lanes_le(y_t_next) & x_left) | !y_left;
+                let is_y = !is_x;
+
+                let x = any_left.select(is_x.select(x_next, x0 + y_t_next*dx), x_prev);
+                let y = any_left.select(is_y.select(y_next, y0 + x_t_next*dy), y_prev);
+
+                x_next   += is_x.select(x_step, F32v::ZERO);
+                y_next   += is_y.select(y_step, F32v::ZERO);
+                x_t_next += is_x.select(x_dt, F32v::ZERO);
+                y_t_next += is_y.select(y_dt, F32v::ZERO);
+
+                x_i      += (is_x & x_left).select(x_step, F32v::ZERO);
+                x_rem    -= is_x.select(I32v::ONE, I32v::ZERO);
+
+                row_base += (is_y & y_left).select(row_delta, I32v::ZERO);
+                y_rem    -= is_y.select(I32v::ONE, I32v::ZERO);
+
+                add_deltas(self, prev_base, prev_x_i, x_prev, y_prev, x, y);
+
+                x_prev = x;
+                y_prev = y;
+            }
+
+            debug_assert!(row_base.lanes_eq((stride * y_i1).to_i32()).all());
+            debug_assert!(x_i.lanes_eq(x_i1).all());
+
+            add_deltas(self, row_base, x_i, x_prev, y_prev, x1, y1);
+        }
+
+        self.buffered = 0;
+
+        return;
+        
 
         #[inline(always)]
-        unsafe fn add_delta(r: &mut Rasterizer, row_base: usize, x_i: f32,
-            x0: f32, y0: f32, x1: f32, y1: f32
+        fn safe_div(a: F32v, b: F32v, default: F32v) -> F32v {
+            let is_zero = b.lanes_eq(F32v::ZERO);
+            is_zero.select(default, a/b)
+        }
+
+        #[inline(always)]
+        fn add_deltas(r: &mut Rasterizer, row_base: I32v, x_i: F32v,
+            x0: F32v, y0: F32v, x1: F32v, y1: F32v
         ) {
             let delta = y1 - y0;
 
-            let x_mid = (x0 + x1) / 2.0 - x_i;
+            let x_mid = (x0 + x1) / F32v::splat(2.0) - x_i;
             let delta_right = delta * x_mid;
+            let delta_left  = delta - delta_right;
 
-            debug_assert!(x_mid >= 0.0 - ZERO_TOLERANCE && x_mid <= 1.0 + ZERO_TOLERANCE);
-            debug_assert!(x_i >= 0.0 && x_i <= r.size.x());
+            debug_assert!(x_mid.lanes_ge(F32v::splat(0.0 - ZERO_TOLERANCE)).all());
+            debug_assert!(x_mid.lanes_le(F32v::splat(1.0 + ZERO_TOLERANCE)).all());
+            debug_assert!(x_i.lanes_ge(F32v::splat(0.0)).all());
+            debug_assert!(x_i.lanes_le(F32v::splat(r.size.x())).all()); // le because padding
 
-            let x: usize = x_i.to_int_unchecked::<i32>() as usize;
-            r.deltas[row_base + x + 0] += delta - delta_right;
-            r.deltas[row_base + x + 1] += delta_right;
+            let x = unsafe { x_i.to_i32_unck() };
+            let o = row_base + x;
+
+            assert!(o.lanes_ge(I32v::splat(0)).all());
+            assert!(o.lanes_lt(I32v::splat(r.deltas_len - 1)).all());
+
+            let deltas = r.deltas.data.as_mut_ptr();
+            for i in 0..WIDTH {
+                unsafe {
+                    *deltas.add(o[i] as usize + 0) += delta_left[i];
+                    *deltas.add(o[i] as usize + 1) += delta_right[i];
+                }
+            }
         }
+
     }
 
     pub unsafe fn add_left_delta_bounded(&mut self, y0: F32, y1: F32) {

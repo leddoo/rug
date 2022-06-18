@@ -1,16 +1,43 @@
 todo:
-- clean up:
-    - get rid of `crate::float`? or at least make it fast.
-    - rasterizer interface.
-    - simplify stroker (single path walk).
-- optimization:
-    - segment batching.
-    - try 4 wide fill_mask.
-    - align rasterizer mask.
-    - large paths.
-- features:
-    - circular & elliptic arcs.
-    - stroke: round, miter, square.
+- segment batching.
+    - update simd.rs & use `.mul()`.
+    - put `shift` into simd.rs as shift_lanes_up.
+    - separate zero length segments.
+- command buffer.
+    - get high level overview:
+        - what's the user api?
+        - what does renderer do?
+        - what does renderer need to go fast?
+        - how to control parallelization?
+    - path builder: explicit vs implicit?
+        - memory allocation?
+    - transforms?
+        - well, can't apply immediately, because strokes.
+        - thinking "stateful" ~ transform command.
+        - could also store transforms in an array, then store transform index with every command.
+        - depends on usage. stateful is simpler. don't know if we need random access.
+- simplify stroker (single path walk).
+
+optimization:
+- align rasterizer mask.
+- large paths.
+    - accumulate_runs.
+    - fill_mask: remove alpha pruning, solid fill only for runs (accumulate_runs makes sure runs are long enough).
+    - try global boundary fragment rasterization with per-tile binning/sorting and delta_out/winding_in.
+    - what does blend2d do?
+
+stuff:
+- get rid of `crate::float`? or at least make it fast.
+- try 4 wide fill_mask.
+    - maybe not.
+    - 2 vectors should help with ipc.
+    - but maybe 4x2 for better work efficiency.
+        - first align masks.
+        - then determine work efficiency.
+        - and estimate gains from going 4x2.
+- circular & elliptic arcs.
+- stroke: round, miter, square.
+- rasterizer interface?
 
 stuff:
 - multi-threading.
@@ -48,12 +75,6 @@ stuff:
     - consistent rule for tolerance & inclusion (lt vs le).
 - safer window abstraction.
 - static assert sizes & alignments.
-- simd-pre-process rasterizer.
-- perf:
-    - 4x2.
-    - floor/ceil: clamp first -> positive.
-        - can use unchecked cast for flooring.
-        - ceil: floor(x + (1 - 1ulp))
 - optimized out-of-bounds rasterization:
     - skip non-left curves.
     - approximate monotonic parts as segments.
@@ -69,31 +90,6 @@ invariants:
 - curve approx functions: in-order output.
 - paths finite.
 
-
-
-
-optimization ideas:
-- rasterizer:
-    - skip horizontal segments.
-    - special case for vertical segments.
-
-
-
-stuff:
-
-```rust
-#![feature(portable_simd)]
-    use std::simd::*;
-
-    let a = u8x16::from_array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
-    let b = u8x16::from_array([3, 2, 1, 3, 2, 1, 3, 2, 1,  3,  2,  1,  3,  2,  1,  3]);
-    let mask: u8x16 = mask8x16::from_bitmask(0b1010_0011_1100_0101).to_int().cast();
-
-    let mut foo = Vec::<u8x16>::with_capacity(1024*1024*1024);
-    unsafe { foo.set_len(foo.capacity()); }
-    let foo = foo.into_boxed_slice();
-    //let foo = vec![u8x16::splat(42); 1024*1024*1024].into_boxed_slice();
-```
 
 
 rust rules:
