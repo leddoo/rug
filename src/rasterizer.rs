@@ -1,9 +1,9 @@
 extern crate alloc;
 use alloc::alloc::*;
 
-use crate::basic::*;
+use basic::{*, simd::*};
+
 use crate::float::*;
-use crate::simd::*;
 use crate::geometry::*;
 use crate::path::*;
 use crate::image::{Mask};
@@ -260,7 +260,7 @@ impl<'a> Rasterizer<'a> {
         ) {
             let delta = y1 - y0;
 
-            let x_mid = (x0 + x1) / F32v::splat(2.0) - x_i;
+            let x_mid = (x0 + x1).div(2.0) - x_i;
             let delta_right = delta * x_mid;
             let delta_left  = delta - delta_right;
 
@@ -669,7 +669,7 @@ impl<'r, 'a> Stroker<'r, 'a> {
     fn join(&mut self, p0: F32x2, normal: F32x2) {
         if self.has_prev {
             // bevel join.
-            self.rasterizer.add_segment_p(self.prev_end, p0 + F32x2::splat(self.distance)*normal);
+            self.rasterizer.add_segment_p(self.prev_end, p0 + self.distance.mul(normal));
         }
     }
 
@@ -693,7 +693,7 @@ impl<'r, 'a> Stroker<'r, 'a> {
         if self.distance != 0.0 {
             self.join(segment.p0, normal);
             self.rasterizer.add_segment(segment.offset(normal, self.distance));
-            self.set_end(segment.p1 + F32x2::splat(self.distance)*normal);
+            self.set_end(segment.p1 + self.distance.mul(normal));
         }
         else {
             self.rasterizer.add_segment(segment);
@@ -730,7 +730,7 @@ impl<'r, 'a> Stroker<'r, 'a> {
                     };
                     quadratic.offset(&mut f, n0, n1, self.distance, tol, rec);
 
-                    self.set_end(quadratic.p2 + F32x2::splat(self.distance)*n1);
+                    self.set_end(quadratic.p2 + self.distance.mul(n1));
                 }
                 else {
                     self.rasterizer.add_quadratic_tol_rec(quadratic, tolerance_squared, max_recursion);

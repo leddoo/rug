@@ -1,6 +1,5 @@
-use crate::basic::*;
+use basic::{*, simd::*};
 use crate::float::*;
-use crate::simd::*;
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -93,7 +92,7 @@ impl Segment {
 
     #[inline(always)]
     pub fn offset(self, normal: F32x2, distance: F32) -> Segment {
-        self + F32x2::splat(distance)*normal
+        self + distance.mul(normal)
     }
 
     #[inline(always)]
@@ -156,7 +155,7 @@ impl Quadratic {
             err = length(p1/2 - (p0 + p2)/4)
                 = length(p1*2/4 - (p0 + p2)/4)
                 = 1/2 * length(2*p1 - (p0 + p2)) */
-        let err_sq = 0.25 * (F32x2::splat(2.0)*self.p1 - (self.p0 + self.p2)).length_squared();
+        let err_sq = 0.25 * (2.0.mul(self.p1) - (self.p0 + self.p2)).length_squared();
 
         if max_recursion == 0 || err_sq < tolerance_squared {
             f(self.p0, self.p2, max_recursion)
@@ -186,7 +185,7 @@ impl Quadratic {
 
         // TODO: understand & explain.
         let n1 = n0 + n2;
-        let n1 = F32x2::splat(2.0) * n1/F32x2::splat(n1.dot(n1));
+        let n1 = 2.0.mul( n1.div(n1.dot(n1)) );
 
         let d = F32x2::splat(distance);
         let approx =
@@ -400,7 +399,7 @@ impl Cubic {
     pub fn approx_quad(self) -> Quadratic {
         quadratic(
             self.p0,
-            F32x2::splat(0.25*3.0)*(self.p1 + self.p2) - F32x2::splat(0.25)*(self.p0 + self.p3),
+            (0.25*3.0).mul(self.p1 + self.p2) - 0.25.mul(self.p0 + self.p3),
             self.p3)
     }
 
@@ -414,7 +413,7 @@ impl Cubic {
         // TODO: this should be squared, i think.
         // maybe that's why pow 1/12 is better.
         let scale: f32 = 0.0481125224324688137090957317; // sqrt(3)/36
-        let err_sq = scale * (F32x2::splat(3.0)*(p1 - p2) + (p3 - p0)).length_squared();
+        let err_sq = scale * (3.0.mul(p1 - p2) + (p3 - p0)).length_squared();
 
         if max_recursion == 0 || err_sq < tolerance_squared {
             f(self.approx_quad(), max_recursion);

@@ -5,8 +5,7 @@ use alloc::{
     vec::Vec,
 };
 
-use crate::basic::*;
-use crate::simd::*;
+use basic::{*, simd::*};
 use crate::geometry::*;
 
 

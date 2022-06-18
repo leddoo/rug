@@ -1,6 +1,5 @@
 todo:
 - segment batching.
-    - update simd.rs & use `.mul()`.
     - put `shift` into simd.rs as shift_lanes_up.
         - try `match amount` + zero shuffle. maybe isel gets it.
 - command buffer.
