@@ -83,26 +83,28 @@ struct Svg<'a> {
 
 #[inline(never)]
 fn target_to_argb_at(target: &Target, w: usize, h: usize, output: &mut Vec<u32>, start: usize, stride: usize) {
+    const N: usize = Target::simd_width();
+
     for y in 0..h {
         let offset = start + y*stride;
 
         let y = (h - 1) - y;
 
-        for x in 0..(w / 8) {
+        for x in 0..(w / N) {
             let rgba = target[(x, y)];
-            let argb = argb_u8x8_pack(rgba);
-            for dx in 0..8 {
-                output[offset + 8*x + dx] = argb.as_array()[dx];
+            let argb = argb_u8x_pack(rgba);
+            for dx in 0..N {
+                output[offset + N*x + dx] = argb.as_array()[dx];
             }
         }
 
-        let rem = w % 8;
+        let rem = w % N;
         if rem > 0 {
-            let x = w/8;
+            let x = w/N;
             let rgba = target[(x, y)];
-            let argb = argb_u8x8_pack(rgba);
+            let argb = argb_u8x_pack(rgba);
             for dx in 0..rem {
-                output[offset + 8*x + dx] = argb.as_array()[dx];
+                output[offset + N*x + dx] = argb.as_array()[dx];
             }
         }
     }
@@ -416,9 +418,9 @@ fn _render_svg(svg: &Svg, w: u32, h: u32, output: &mut Vec<u32>) {
     }
 
 
-    if 1==1 {
+    if 0==1 {
         let dt = t0.elapsed();
-        let size = (tile_target.stride() * tile_target.height() as usize) * core::mem::size_of::<[F32x8; 4]>();
+        let size = (tile_target.stride() * tile_target.height() as usize) * core::mem::size_of::<[F32x<{Target::simd_width()}>; 4]>();
         let pixels = w*h;
         let dt_path = dt.as_secs_f32() * 1000.0 * 1000.0 / paths as f32;
         let dt_frag = dt.as_secs_f32() * 1000.0 * 1000.0 * 1000.0 / fragments as f32;

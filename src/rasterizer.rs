@@ -94,13 +94,13 @@ impl<'a> Rasterizer<'a> {
             let aligned_w = w/4*4;
 
             for x in (0..aligned_w).step_by(4) {
-                let mut d = deltas.read4(x, y);
+                let mut d = deltas.read(x, y);
 
                 d = d + shift::<4>(d);
                 d = d + shift::<8>(d);
                 c = c + d;
 
-                deltas.write4(x, y, c.abs().at_mostf(F32x4::splat(1.0)));
+                deltas.write(x, y, c.abs().at_mostf(F32x4::splat(1.0)));
 
                 c = F32x4::splat(c[3]);
 
@@ -330,7 +330,7 @@ impl<'a> Rasterizer<'a> {
         #[inline(always)]
         unsafe fn add_delta(r: &mut Rasterizer, row_base: usize, y0: f32, y1: f32) {
             let delta = y1 - y0;
-            r.deltas[row_base + 0] += delta;
+            r.deltas.data[row_base + 0] += delta;
         }
     }
 
@@ -413,6 +413,7 @@ impl<'a> Rasterizer<'a> {
         }
     }
 
+    #[inline(always)]
     pub fn add_segment(&mut self, segment: Segment) {
         self.add_segment_p(segment.p0, segment.p1)
     }
