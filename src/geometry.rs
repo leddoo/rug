@@ -102,6 +102,17 @@ impl Segment {
             self.p0.max(self.p1),
         )
     }
+
+    #[inline(always)]
+    pub fn rev(self) -> Segment {
+        segment(self.p1, self.p0)
+    }
+
+    pub fn ggb(self) {
+        println!("Segment(({}, {}), ({}, {})),",
+            self.p0.x(), self.p0.y(),
+            self.p1.x(), self.p1.y());
+    }
 }
 
 impl core::ops::Add<F32x2> for Segment {
@@ -224,6 +235,18 @@ impl Quadratic {
             self.p0.min(self.p1).min(self.p2),
             self.p0.max(self.p1).max(self.p2),
         )
+    }
+
+    #[inline(always)]
+    pub fn rev(self) -> Quadratic {
+        quadratic(self.p2, self.p1, self.p0)
+    }
+
+    pub fn ggb(self) {
+        println!("Curve((1 - t)² ({}, {}) + 2(1 - t) t ({}, {}) + t² ({}, {}), t, 0, 1),",
+            self.p0.x(), self.p0.y(),
+            self.p1.x(), self.p1.y(),
+            self.p2.x(), self.p2.y());
     }
 }
 
@@ -474,6 +497,19 @@ impl Cubic {
             (self.p0.min(self.p1)).min(self.p2.min(self.p3)),
             (self.p0.max(self.p1)).max(self.p2.max(self.p3)),
         )
+    }
+
+    #[inline(always)]
+    pub fn rev(self) -> Cubic {
+        cubic(self.p3, self.p2, self.p1, self.p0)
+    }
+
+    pub fn ggb(self) {
+        println!("Curve((1 - t)³ ({}, {}) + 3(1 - t)² t ({}, {}) + 3 (1 - t) t² ({}, {}) + t³ ({}, {}), t, 0, 1),",
+            self.p0.x(), self.p0.y(),
+            self.p1.x(), self.p1.y(),
+            self.p2.x(), self.p2.y(),
+            self.p3.x(), self.p3.y());
     }
 }
 

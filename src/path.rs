@@ -216,3 +216,11 @@ impl<'a> PathBuilder<'a> {
         self.begin_verb = usize::MAX;
     }
 }
+
+
+pub struct SoaPath<'a> {
+    pub lines:  Box<[Segment],   &'a dyn Allocator>,
+    pub quads:  Box<[Quadratic], &'a dyn Allocator>,
+    pub cubics: Box<[Cubic],     &'a dyn Allocator>,
+    pub aabb:   Rect,
+}

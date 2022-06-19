@@ -1,30 +1,49 @@
 todo:
-- segment batching.
-    - put `shift` into simd.rs as shift_lanes_up.
-        - try `match amount` + zero shuffle. maybe isel gets it.
 - command buffer.
-    - get high level overview:
-        - what's the user api?
-        - what does renderer do?
-        - what does renderer need to go fast?
-        - how to control parallelization?
-    - path builder: explicit vs implicit?
-        - memory allocation?
-    - transforms?
-        - well, can't apply immediately, because strokes.
-        - thinking "stateful" ~ transform command.
-        - could also store transforms in an array, then store transform index with every command.
-        - depends on usage. stateful is simpler. don't know if we need random access.
-- simplify stroker (single path walk).
+    - use stroke.
+
+
+command buffer:
+- initial api:
+    - paths.
+    - solid color fill/stroke.
+    - stroke width.
+    - transforms.
+- what we need impl wise:
+    - some repr of the command buffer.
+    - exec:
+        - stroke.
+        - transform.
+        - tile command masks.
+- granularity:
+    - might want to cache strokes.
+        - that should be pretty easy:
+            - stroke_path as function, returning "soa" path.
+            - ability to fill "soa" paths.
+            - actually, fills should be soa too -> reduced per-tile branching.
+            - so transform should return soa path.
+    - best would be to do all exec steps in one pass.
+        - so tile masks should be optional.
+
 
 optimization:
 - large paths.
-    - accumulate_runs.
-    - fill_mask: remove alpha pruning, solid fill only for runs (accumulate_runs makes sure runs are long enough).
-    - try global boundary fragment rasterization with per-tile binning/sorting and delta_out/winding_in.
     - what does blend2d do?
+    - try global boundary fragment rasterization with per-tile binning/sorting and delta_out/winding_in.
+    - fill_mask: remove branches.
+- not accumulate_runs.
+    - ~90% of fragments come from runs >= 4.
+    - but when skipping large fills/strokes (w or h > 30), only 5% do.
+    - this suggests trying the boundary fragment binning thing first.
+    - but that will require quite a bit of restructuring (stroker).
+    - so let's make the thing usable first.
 
 stuff:
+- put `shift` into simd.rs as shift_lanes_up.
+    - try `match amount` + zero shuffle. maybe isel gets it.
+- logging utils.
+    - scoping.
+    - hashmap counter util. (key, number-of-occurences)
 - get rid of `crate::float`? or at least make it fast.
 - try 4 wide fill_mask.
     - maybe not.

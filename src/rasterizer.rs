@@ -11,6 +11,7 @@ use crate::image::{Mask};
 
 // these are absolute and in pixel space.
 pub const ZERO_TOLERANCE:    f32 = 0.001;
+pub const ZERO_TOLERANCE_SQ: f32 = ZERO_TOLERANCE*ZERO_TOLERANCE;
 pub const FLATTEN_TOLERANCE: f32 = 0.1;
 pub const FLATTEN_RECURSION: u32 = 16;
 
