@@ -1,6 +1,9 @@
 todo:
 - command buffer.
-    - use stroke.
+    - transforms: zoom/pan in main.rs
+    - command buffer data structure.
+- configurable stroker tolerances.
+    - zero tolerance is too tight for "sloppy" paths.
 
 
 command buffer:
@@ -17,11 +20,6 @@ command buffer:
         - tile command masks.
 - granularity:
     - might want to cache strokes.
-        - that should be pretty easy:
-            - stroke_path as function, returning "soa" path.
-            - ability to fill "soa" paths.
-            - actually, fills should be soa too -> reduced per-tile branching.
-            - so transform should return soa path.
     - best would be to do all exec steps in one pass.
         - so tile masks should be optional.
 

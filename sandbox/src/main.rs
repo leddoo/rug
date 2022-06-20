@@ -288,9 +288,8 @@ fn rasterize_fill(tile: Rect, path: &Path) -> Option<(U32x2, Mask<'static>)> {
     rasterize(tile, path.aabb, |p0, r| r.fill_path(path, p0))
 }
 
-fn rasterize_stroke(tile: Rect, path: &Path, width: F32) -> Option<(U32x2, Mask<'static>)> {
-    rasterize(tile, path.aabb.grow(F32x2::splat(width/2.0)), |p0, r|
-        r.stroke_path(path, width/2.0, width/2.0, p0))
+fn rasterize_fill_soa(tile: Rect, path: &SoaPath) -> Option<(U32x2, Mask<'static>)> {
+    rasterize(tile, path.aabb, |p0, r| r.fill_soa_path(path, p0))
 }
 
 
@@ -322,6 +321,8 @@ fn _render_svg(svg: &Svg, w: u32, h: u32, output: &mut Vec<u32>) {
     let visible_count = (path_count + 63)/64;
     let mut visible = vec![0; visible_count*tile_count];
 
+    let mut strokes = vec![None; svg.commands.len()];
+
     for (command_index, command) in svg.commands.iter().enumerate() {
 
         fn fill_visible(visible: &mut Vec<u64>, visible_count: usize, path_index: usize, path_aabb: Rect,
@@ -351,7 +352,9 @@ fn _render_svg(svg: &Svg, w: u32, h: u32, output: &mut Vec<u32>) {
             },
 
             SvgCommand::Stroke (path, _color, width) => {
-                let aabb = path.aabb.grow(F32x2::splat(width/2.0));
+                let path = stroke_path(path, *width);
+                let aabb = path.aabb;
+                strokes[command_index] = Some(path);
                 fill_visible(&mut visible, visible_count, command_index, aabb, tile_size, tiles_x, tiles_y);
             },
         }
@@ -394,8 +397,9 @@ fn _render_svg(svg: &Svg, w: u32, h: u32, output: &mut Vec<u32>) {
                             }
                         },
 
-                        SvgCommand::Stroke (path, color, width) => {
-                            if let Some((offset, mask)) = rasterize_stroke(tile, path, *width) {
+                        SvgCommand::Stroke (_path, color, _width) => {
+                            let path = strokes[command_index].as_ref().unwrap();
+                            if let Some((offset, mask)) = rasterize_fill_soa(tile, path) {
                                 paths += 1;
                                 fragments += (mask.width() * mask.height()) as usize;
                                 fill_mask(&mut tile_target, offset, &mask, *color);

@@ -218,6 +218,7 @@ impl<'a> PathBuilder<'a> {
 }
 
 
+#[derive(Clone)]
 pub struct SoaPath<'a> {
     pub lines:  Box<[Segment],   &'a dyn Allocator>,
     pub quads:  Box<[Quadratic], &'a dyn Allocator>,

@@ -14,8 +14,8 @@ pub fn stroke_path(path: &Path, width: F32) -> SoaPath<'static> {
 
 pub fn stroke_path_in<'a>(path: &Path, width: F32, allocator: &'a dyn Allocator) -> SoaPath<'a> {
     let mut stroker = Stroker {
-        left:   width,
-        right: -width,
+        left:   width/2.0,
+        right: -width/2.0,
         tolerance_sq: 0.05 * 0.05,
         max_recursion: 16,
 
