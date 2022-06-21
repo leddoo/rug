@@ -13,15 +13,18 @@ fn main() {
             parse_xml(core::str::from_utf8(file).unwrap())
         };
 
+        let tfx = Transform::scale(1.0);
+
         let iters = 50;
         let t0 = std::time::Instant::now();
 
         let mut image = vec![];
         for _ in 0..iters {
-            //_render_svg(&svg, 2560, 1440, &mut image);
-            //_render_svg(&svg, 2048, 2048, &mut image);
-            _render_svg(&svg, 1024, 1024, &mut image);
-            //_render_svg(&svg, 512, 512, &mut image);
+            //_render_svg(&svg, 2560, 1440, tfx, &mut image);
+            //_render_svg(&svg, 2048, 2048, tfx, &mut image);
+            //_render_svg(&svg, 1920, 1080, tfx, &mut image);
+            _render_svg(&svg, 1024, 1024, tfx, &mut image);
+            //_render_svg(&svg, 512, 512, tfx, &mut image);
             //break;
         }
 
@@ -45,6 +48,12 @@ fn program() {
         parse_xml(core::str::from_utf8(file).unwrap())
     };
 
+    let mut zoom = 0;
+    let mut scale = 1.0;
+    let mut offset = F32x2::ZERO;
+    let mut panning = false;
+    let mut mouse = F32x2::ZERO;
+
     let window = win32::Window::new();
     let mut old_size = (0, 0);
     loop {
@@ -54,6 +63,40 @@ fn program() {
             match e {
                 Close (_) => { win32::exit(); },
                 Paint (_) => { old_size = (0, 0) },
+
+                MouseMove (_, x, y) => {
+                    let size = window.size();
+                    let new_mouse = F32x2::new(x as f32, (size.1 - 1 - y) as f32);
+                    let delta = new_mouse - mouse;
+                    mouse = new_mouse;
+                    if panning {
+                        offset += delta;
+                        old_size = (0, 0);
+                    }
+                }
+
+                MouseDown (_, _, _, which) => {
+                    if let win32::MouseButton::Right = which {
+                        panning = true;
+                    }
+                }
+
+                MouseUp (_, _, _, which) => {
+                    if let win32::MouseButton::Right = which {
+                        panning = false;
+                    }
+                }
+
+                MouseWheel (_, delta) => {
+                    zoom += delta;
+                    let new_scale = libm::expf(zoom as f32 * 0.1);
+
+                    offset = mouse - (new_scale/scale).mul(mouse - offset);
+                    scale = new_scale;
+
+                    old_size = (0, 0);
+                }
+
                 _ => (),
             }
             event = win32::peek_event();
@@ -64,7 +107,8 @@ fn program() {
             old_size = size;
 
             let (w, h) = size;
-            let buffer = render_svg(&svg, w, h);
+            let tfx = Transform::translate(offset) * Transform::scale(scale);
+            let buffer = render_svg(&svg, w, h, tfx);
             window.fill_pixels(&buffer, 0, 0, w, h);
         }
     }
@@ -284,8 +328,12 @@ fn rasterize<F: FnOnce(F32x2, &mut Rasterizer)>(tile: Rect, aabb: Rect, f: F) ->
     Some((offset, r.accumulate()))
 }
 
-fn rasterize_fill(tile: Rect, path: &Path) -> Option<(U32x2, Mask<'static>)> {
-    rasterize(tile, path.aabb, |p0, r| r.fill_path(path, p0))
+fn rasterize_fill(tile: Rect, path: &Path, tfx: Transform) -> Option<(U32x2, Mask<'static>)> {
+    rasterize(tile, tfx.aabb_transform(path.aabb), |p0, r| {
+        let mut tfx = tfx;
+        tfx.columns[2] -= p0;
+        r.fill_path_tfx(path, tfx)
+    })
 }
 
 fn rasterize_fill_soa(tile: Rect, path: &SoaPath) -> Option<(U32x2, Mask<'static>)> {
@@ -293,14 +341,14 @@ fn rasterize_fill_soa(tile: Rect, path: &SoaPath) -> Option<(U32x2, Mask<'static
 }
 
 
-fn render_svg(svg: &Svg, w: u32, h: u32) -> Vec<u32> {
+fn render_svg(svg: &Svg, w: u32, h: u32, tfx: Transform) -> Vec<u32> {
     let mut output = vec![];
-    _render_svg(svg, w, h, &mut output);
+    _render_svg(svg, w, h, tfx, &mut output);
     output
 }
 
 #[inline(never)]
-fn _render_svg(svg: &Svg, w: u32, h: u32, output: &mut Vec<u32>) {
+fn _render_svg(svg: &Svg, w: u32, h: u32, tfx: Transform, output: &mut Vec<u32>) {
     output.clear();
     output.reserve((w*h) as usize);
     unsafe { output.set_len((w*h) as usize) };
@@ -348,11 +396,13 @@ fn _render_svg(svg: &Svg, w: u32, h: u32, output: &mut Vec<u32>) {
 
         match command {
             SvgCommand::Fill (path, _color) => {
-                fill_visible(&mut visible, visible_count, command_index, path.aabb, tile_size, tiles_x, tiles_y);
+                let aabb = tfx.aabb_transform(path.aabb);
+                fill_visible(&mut visible, visible_count, command_index, aabb, tile_size, tiles_x, tiles_y);
             },
 
             SvgCommand::Stroke (path, _color, width) => {
-                let path = stroke_path(path, *width);
+                let mut path = stroke_path(path, *width);
+                path.transform(tfx);
                 let aabb = path.aabb;
                 strokes[command_index] = Some(path);
                 fill_visible(&mut visible, visible_count, command_index, aabb, tile_size, tiles_x, tiles_y);
@@ -390,7 +440,7 @@ fn _render_svg(svg: &Svg, w: u32, h: u32, output: &mut Vec<u32>) {
 
                     match &svg.commands[command_index] {
                         SvgCommand::Fill (path, color) => {
-                            if let Some((offset, mask)) = rasterize_fill(tile, path) {
+                            if let Some((offset, mask)) = rasterize_fill(tile, path, tfx) {
                                 paths += 1;
                                 fragments += (mask.width() * mask.height()) as usize;
                                 fill_mask(&mut tile_target, offset, &mask, *color);

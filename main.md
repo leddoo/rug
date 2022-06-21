@@ -1,10 +1,19 @@
 todo:
 - command buffer.
-    - transforms: zoom/pan in main.rs
     - command buffer data structure.
 - configurable stroker tolerances.
     - zero tolerance is too tight for "sloppy" paths.
 
+stuff:
+- need arena before can continue optimization.
+- consider `Path` for stroker:
+    - just write to two paths.
+    - then reverse append.
+    - for segment only paths, the SOA path is almost twice as large.
+- consider `Image<channels, simd_width>`.
+- mt:
+    - `Sync + Send` shouldn't actually be an allocator requirement.
+    - guess we need `Image<A: Allocator>`.
 
 command buffer:
 - initial api:

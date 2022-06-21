@@ -484,10 +484,28 @@ impl<'a> Rasterizer<'a> {
         }
     }
 
+    pub fn fill_path_tfx(&mut self, path: &Path, tfx: Transform) {
+        for event in path.iter() {
+            use IterEvent::*;
+            match event {
+                Segment(segment)     => { self.add_segment(tfx * segment); },
+                Quadratic(quadratic) => { self.add_quadratic(tfx * quadratic); },
+                Cubic(cubic)         => { self.add_cubic(tfx * cubic); },
+                _ => (),
+            }
+        }
+    }
+
     pub fn fill_soa_path(&mut self, path: &SoaPath, position: F32x2) {
         for line  in path.lines.iter()  { self.add_segment(*line + -position); }
         for quad  in path.quads.iter()  { self.add_quadratic(*quad + -position); }
         for cubic in path.cubics.iter() { self.add_cubic(*cubic + -position); }
+    }
+
+    pub fn fill_soa_path_tfx(&mut self, path: &SoaPath, tfx: Transform) {
+        for line  in path.lines.iter()  { self.add_segment(tfx * *line); }
+        for quad  in path.quads.iter()  { self.add_quadratic(tfx * *quad); }
+        for cubic in path.cubics.iter() { self.add_cubic(tfx * *cubic); }
     }
 
     pub fn stroke_path(&mut self,

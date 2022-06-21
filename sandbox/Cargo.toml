@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 rug = {path = "../"}
+libm = "0.2.2"
 roxmltree = "0.14"
 svgtypes = "0.8"
 

@@ -53,6 +53,7 @@ pub enum Event {
     MouseMove (HWND, u32, u32),
     MouseDown (HWND, u32, u32, MouseButton),
     MouseUp   (HWND, u32, u32, MouseButton),
+    MouseWheel (HWND, i32),
     KeyDown (HWND, VIRTUAL_KEY),
     KeyUp   (HWND, VIRTUAL_KEY),
     Char (HWND, u16),
@@ -334,6 +335,12 @@ unsafe extern "system" fn user_window_proc(window: HWND, message: u32, wparam: W
             queue.send(Event::MouseUp(window, x, y, button)).unwrap();
             LRESULT(0)
         },
+
+        WM_MOUSEWHEEL => {
+            let delta = high_u16(wparam.0 as isize) as i16 as i32 / 120;
+            queue.send(Event::MouseWheel(window, delta)).unwrap();
+            LRESULT(0)
+        }
 
         WM_KEYDOWN => {
             let key = VIRTUAL_KEY(wparam.0 as usize as u16);

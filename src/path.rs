@@ -225,3 +225,32 @@ pub struct SoaPath<'a> {
     pub cubics: Box<[Cubic],     &'a dyn Allocator>,
     pub aabb:   Rect,
 }
+
+impl<'a> SoaPath<'a> {
+    pub fn transform(&mut self, tfx: Transform) {
+        let mut aabb = rect(F32x2::splat(f32::MAX), F32x2::splat(f32::MIN));
+
+        for line in self.lines.iter_mut() {
+            *line = tfx * (*line);
+            aabb.include(line.p0);
+            aabb.include(line.p1);
+        }
+
+        for quad in self.quads.iter_mut() {
+            *quad = tfx * (*quad);
+            aabb.include(quad.p0);
+            aabb.include(quad.p1);
+            aabb.include(quad.p2);
+        }
+
+        for cubic in self.cubics.iter_mut() {
+            *cubic = tfx * (*cubic);
+            aabb.include(cubic.p0);
+            aabb.include(cubic.p1);
+            aabb.include(cubic.p2);
+            aabb.include(cubic.p3);
+        }
+
+        self.aabb = aabb;
+    }
+}

@@ -16,13 +16,13 @@ pub fn rect(min: F32x2, max: F32x2) -> Rect {
 impl Rect {
     #[inline(always)]
     pub fn from_points(p0: F32x2, p1: F32x2) -> Rect {
-        rect(p0.min(p1), p0.max(p1))
+        rect(p0.minf(p1), p0.maxf(p1))
     }
 
     #[inline(always)]
     pub fn include(&mut self, p: F32x2) {
-        self.min = self.min.min(p);
-        self.max = self.max.max(p);
+        self.min = self.min.minf(p);
+        self.max = self.max.maxf(p);
     }
 
     #[inline(always)]
@@ -98,8 +98,8 @@ impl Segment {
     #[inline(always)]
     pub fn aabb(self) -> Rect {
         rect(
-            self.p0.min(self.p1),
-            self.p0.max(self.p1),
+            self.p0.minf(self.p1),
+            self.p0.maxf(self.p1),
         )
     }
 
@@ -232,8 +232,8 @@ impl Quadratic {
     #[inline(always)]
     pub fn aabb(self) -> Rect {
         rect(
-            self.p0.min(self.p1).min(self.p2),
-            self.p0.max(self.p1).max(self.p2),
+            self.p0.minf(self.p1).minf(self.p2),
+            self.p0.maxf(self.p1).maxf(self.p2),
         )
     }
 
@@ -494,8 +494,8 @@ impl Cubic {
     #[inline(always)]
     pub fn aabb(self) -> Rect {
         rect(
-            (self.p0.min(self.p1)).min(self.p2.min(self.p3)),
-            (self.p0.max(self.p1)).max(self.p2.max(self.p3)),
+            (self.p0.minf(self.p1)).minf(self.p2.minf(self.p3)),
+            (self.p0.maxf(self.p1)).maxf(self.p2.maxf(self.p3)),
         )
     }
 
@@ -526,3 +526,109 @@ impl core::ops::Add<F32x2> for Cubic {
         )
     }
 }
+
+
+#[derive(Clone, Copy, Debug)]
+pub struct Transform {
+    pub columns: [F32x2; 3],
+}
+
+impl Transform {
+    pub const ID: Transform = Transform::scale(1.0);
+
+    #[inline(always)]
+    pub const fn scale(s: F32) -> Transform {
+        Transform { columns: [
+            F32x2::from_array([  s, 0.0]),
+            F32x2::from_array([0.0,   s]), 
+            F32x2::from_array([0.0, 0.0]),
+        ]}
+    }
+
+    #[inline(always)]
+    pub const fn translate(v: F32x2) -> Transform {
+        let mut result = Transform::ID;
+        result.columns[2] = v;
+        result
+    }
+
+    #[inline(always)]
+    pub fn aabb_transform(self, aabb: Rect) -> Rect {
+        let p0 = self * F32x2::new(aabb.min.x(), aabb.min.y());
+        let p1 = self * F32x2::new(aabb.min.x(), aabb.max.y());
+        let p2 = self * F32x2::new(aabb.max.x(), aabb.min.y());
+        let p3 = self * F32x2::new(aabb.max.x(), aabb.max.y());
+        rect(
+            (p0.minf(p1)).minf(p2.minf(p3)),
+            (p0.maxf(p1)).maxf(p2.maxf(p3)),
+        )
+    }
+}
+
+impl core::ops::Index<usize> for Transform {
+    type Output = F32x2;
+
+    #[inline(always)]
+    fn index(&self, column: usize) -> &F32x2 {
+        &self.columns[column]
+    }
+}
+
+impl core::ops::IndexMut<usize> for Transform {
+    #[inline(always)]
+    fn index_mut(&mut self, column: usize) -> &mut F32x2 {
+        &mut self.columns[column]
+    }
+}
+
+impl core::ops::Mul<Transform> for Transform {
+    type Output = Transform;
+
+    #[inline(always)]
+    fn mul(self, other: Transform) -> Transform {
+        let r0 = F32x2::new(self[0][0], self[1][0]);
+        let r1 = F32x2::new(self[0][1], self[1][1]);
+        Transform { columns: [
+            F32x2::new(r0.dot(other[0]), r1.dot(other[0])),
+            F32x2::new(r0.dot(other[1]), r1.dot(other[1])),
+            F32x2::new(r0.dot(other[2]), r1.dot(other[2])) + self[2],
+        ]}
+    }
+}
+
+impl core::ops::Mul<F32x2> for Transform {
+    type Output = F32x2;
+
+    #[inline(always)]
+    fn mul(self, v: F32x2) -> F32x2 {
+        F32x2::splat(v[0])*self[0] + F32x2::splat(v[1])*self[1] + self[2]
+    }
+}
+
+impl core::ops::Mul<Segment> for Transform {
+    type Output = Segment;
+
+    #[inline(always)]
+    fn mul(self, s: Segment) -> Segment {
+        segment(self*s.p0, self*s.p1)
+    }
+}
+
+impl core::ops::Mul<Quadratic> for Transform {
+    type Output = Quadratic;
+
+    #[inline(always)]
+    fn mul(self, q: Quadratic) -> Quadratic {
+        quadratic(self*q.p0, self*q.p1, self*q.p2)
+    }
+}
+
+impl core::ops::Mul<Cubic> for Transform {
+    type Output = Cubic;
+
+    #[inline(always)]
+    fn mul(self, c: Cubic) -> Cubic {
+        cubic(self*c.p0, self*c.p1, self*c.p2, self*c.p3)
+    }
+}
+
