@@ -472,7 +472,7 @@ impl<'a> Rasterizer<'a> {
     }
 
 
-    pub fn fill_path(&mut self, path: &Path, position: F32x2) {
+    pub fn fill_path(&mut self, path: PathRef, position: F32x2) {
         for event in path.iter() {
             use IterEvent::*;
             match event {
@@ -484,7 +484,7 @@ impl<'a> Rasterizer<'a> {
         }
     }
 
-    pub fn fill_path_tfx(&mut self, path: &Path, tfx: Transform) {
+    pub fn fill_path_tfx(&mut self, path: PathRef, tfx: Transform) {
         for event in path.iter() {
             use IterEvent::*;
             match event {

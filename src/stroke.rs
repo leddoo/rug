@@ -8,11 +8,11 @@ use crate::path::*;
 use crate::rasterizer::ZERO_TOLERANCE_SQ;
 
 
-pub fn stroke_path(path: &Path, width: F32) -> SoaPath<'static> {
+pub fn stroke_path(path: PathRef, width: F32) -> SoaPath<'static> {
     stroke_path_in(path, width, &Global)
 }
 
-pub fn stroke_path_in<'a>(path: &Path, width: F32, allocator: &'a dyn Allocator) -> SoaPath<'a> {
+pub fn stroke_path_in<'a>(path: PathRef, width: F32, allocator: &'a dyn Allocator) -> SoaPath<'a> {
     let mut stroker = Stroker {
         left:   width/2.0,
         right: -width/2.0,

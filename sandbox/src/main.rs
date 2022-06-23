@@ -115,13 +115,15 @@ fn program() {
 }
 
 
-enum SvgCommand<'a> {
-    Fill (Path<'a>, F32x4),
-    Stroke (Path<'a>, F32x4, F32),
+#[derive(Clone, Copy)]
+enum SvgCommand<'p> {
+    Fill (PathRef<'p>, F32x4),
+    Stroke (PathRef<'p>, F32x4, F32),
 }
 
-struct Svg<'a> {
-    commands: Vec<SvgCommand<'a>>,
+struct Svg<'p> {
+    commands: Vec<SvgCommand<'p>>,
+    aabbs: Vec<Rect>,
 }
 
 
@@ -161,7 +163,7 @@ fn parse_xml(xml: &str) -> Svg<'static> {
     let root = xml.root();
     let svg = root.children().next().unwrap();
 
-    let mut result = Svg { commands: vec![] };
+    let mut result = Svg { aabbs: vec![], commands: vec![] };
 
     for child in svg.children() {
         render(&mut result, child);
@@ -229,7 +231,7 @@ fn parse_xml(xml: &str) -> Svg<'static> {
                     }
                 }
 
-                let path = pb.build();
+                let path = pb.build().leak();
 
                 if let Some(fill) = node.attribute("fill") {
                     if let Ok(color) = svgtypes::Color::from_str(fill) {
@@ -250,7 +252,8 @@ fn parse_xml(xml: &str) -> Svg<'static> {
                             a,
                         );
 
-                        result.commands.push(SvgCommand::Fill(path.clone(), color));
+                        result.aabbs.push(path.aabb());
+                        result.commands.push(SvgCommand::Fill(path, color));
                     }
                     else if fill != "none" {
                         println!("unknown fill: {}", fill);
@@ -284,7 +287,9 @@ fn parse_xml(xml: &str) -> Svg<'static> {
                             a,
                         );
 
-                        result.commands.push(SvgCommand::Stroke(path.clone(), color, width));
+                        // TODO: technically this isn't the aabb of the _stroked_ path.
+                        result.aabbs.push(path.aabb());
+                        result.commands.push(SvgCommand::Stroke(path, color, width));
                     }
                     else if stroke != "none" {
                         println!("unknown stroke: {}", stroke);
@@ -300,6 +305,7 @@ fn parse_xml(xml: &str) -> Svg<'static> {
         Some(())
     }
 
+    assert!(result.aabbs.len() == result.commands.len());
     result
 }
 
@@ -328,8 +334,8 @@ fn rasterize<F: FnOnce(F32x2, &mut Rasterizer)>(tile: Rect, aabb: Rect, f: F) ->
     Some((offset, r.accumulate()))
 }
 
-fn rasterize_fill(tile: Rect, path: &Path, tfx: Transform) -> Option<(U32x2, Mask<'static>)> {
-    rasterize(tile, tfx.aabb_transform(path.aabb), |p0, r| {
+fn rasterize_fill(tile: Rect, path: PathRef, tfx: Transform) -> Option<(U32x2, Mask<'static>)> {
+    rasterize(tile, tfx.aabb_transform(path.aabb()), |p0, r| {
         let mut tfx = tfx;
         tfx.columns[2] -= p0;
         r.fill_path_tfx(path, tfx)
@@ -395,8 +401,8 @@ fn _render_svg(svg: &Svg, w: u32, h: u32, tfx: Transform, output: &mut Vec<u32>)
         }
 
         match command {
-            SvgCommand::Fill (path, _color) => {
-                let aabb = tfx.aabb_transform(path.aabb);
+            SvgCommand::Fill (_path, _color) => {
+                let aabb = tfx.aabb_transform(svg.aabbs[command_index]);
                 fill_visible(&mut visible, visible_count, command_index, aabb, tile_size, tiles_x, tiles_y);
             },
 

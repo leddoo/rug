@@ -1,6 +1,41 @@
 todo:
-- command buffer.
-    - command buffer data structure.
+- simple command buffer.
+    - `Vec<Command>`.
+    - with `PathRef`s.
+    - `U32` color.
+    - command bit vector.
+        - because it doesn't matter that much and much easier to multi-thread.
+
+command buffer.
+- state:
+    - approximation parameters.
+    - composition function.
+    - clip rect/path.
+- fill params:
+    - path (or other shape).
+        - thinking paths external.
+        - because even `Path` is huge (currently 80 bytes).
+        - and not POD.
+    - shader.
+        - variable length, commonly shared -> external.
+        - put shader type into command, separate arrays.
+        - U32 for solid color for now. 1/4 the memory. matters because inline.
+    - fill rule.
+        - single bit, put into command.
+- stroke params:
+    - path.
+    - shader.
+    - cap/join style.
+        - 2 + 2 bits.
+        - or 3 if combined.
+    - width.
+        - only 4 bytes, so indexing doesn't make sense.
+        - put into command.
+        - maybe external when dashed to only need 4 bytes.
+        - left/right? ignore for now. this would be rare -> special command.
+    - dashing.
+        - rare, variable length, shared -> external.
+
 - configurable stroker tolerances.
     - zero tolerance is too tight for "sloppy" paths.
 
@@ -61,6 +96,7 @@ stuff:
         - and estimate gains from going 4x2.
 - circular & elliptic arcs.
 - stroke: round, miter, square.
+- how to deal with open paths fills?
 - rasterizer interface?
 
 stuff:

@@ -1,17 +1,18 @@
-extern crate alloc;
-use alloc::{
-    alloc::{Allocator, Global},
-    boxed::Box,
-    vec::Vec,
-};
+use core::ptr::NonNull;
 
 use basic::{*, simd::*};
+use crate::alloc::*;
 use crate::geometry::*;
 
 
+/// Path syntax:
+///  Path ::= SubPath*
+///  SubPath ::= (BeginOpen | BeginClosed) Curve* End
+///  Curve ::= Segment | Quadratic | Cubic
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Verb {
-    Begin,
+    BeginOpen,
     BeginClosed,
     Segment,
     Quadratic,
@@ -19,21 +20,38 @@ pub enum Verb {
     End,
 }
 
-// (invariant) verbs regex:
-//  `(Begin (Segment | Quadratic | Cubic)* (End | EndClosed))*`
-#[derive(Clone)]
-pub struct Path<'a> {
-    pub verbs:  Box<[Verb],  &'a dyn Allocator>,
-    pub points: Box<[F32x2], &'a dyn Allocator>,
-    pub aabb:   Rect,
+
+pub struct Path<A: Alloc> {
+    header: NonNull<PathHeader>,
+    alloc: A,
 }
 
-impl<'a> Path<'a> {
+impl Path<GlobalAlloc> {
+    pub fn new(verbs: &[Verb], points: &[F32x2], aabb: Rect) -> Self {
+        Path::new_in(verbs, points, aabb, GlobalAlloc)
+    }
+}
+
+
+pub struct PathHeader {
+    verb_count: U32,
+    point_count: U32,
+    aabb: Rect,
+}
+
+impl PathHeader {
+    #[inline(always)]
+    pub fn aabb(&self) -> Rect {
+        self.aabb
+    }
+
     #[inline(always)]
     pub fn iter(&self) -> Iter {
         Iter::new(self)
     }
 }
+
+pub type PathRef<'p> = &'p PathHeader;
 
 
 pub enum IterEvent {
@@ -44,18 +62,20 @@ pub enum IterEvent {
     End       (F32x2), // last-point
 }
 
-pub struct Iter<'p, 'a> {
-    path: &'p Path<'a>,
-    pub(crate) verb:  usize,
-    pub(crate) point: usize,
-    pub(crate) p0:    F32x2,
+pub struct Iter<'p> {
+    verbs:  &'p [Verb],
+    points: &'p [F32x2],
+    verb:  usize,
+    point: usize,
+    p0:    F32x2,
 }
 
-impl<'p, 'a> Iter<'p, 'a> {
+impl<'p> Iter<'p> {
     #[inline(always)]
-    pub fn new(path: &'p Path<'a>) -> Iter<'p, 'a> {
+    pub fn new(path: PathRef<'p>) -> Self {
         Iter {
-            path,
+            verbs:  path.verbs(),
+            points: path.points(),
             verb:  0,
             point: 0,
             p0:    F32x2::ZERO,
@@ -63,22 +83,20 @@ impl<'p, 'a> Iter<'p, 'a> {
     }
 
     pub fn has_next(&self) -> bool {
-        self.verb < self.path.verbs.len()
+        self.verb < self.verbs.len()
     }
 
     pub fn next(&mut self) -> Option<IterEvent> {
-        let path = self.path;
-
         if !self.has_next() {
-            debug_assert!(self.verb  == path.verbs.len());
-            debug_assert!(self.point == path.points.len());
+            debug_assert!(self.verb  == self.verbs.len());
+            debug_assert!(self.point == self.points.len());
             return None;
         }
 
-        let verb = path.verbs[self.verb];
+        let verb = self.verbs[self.verb];
         let result = match verb {
-            Verb::Begin | Verb::BeginClosed => {
-                let p0 = path.points[self.point];
+            Verb::BeginOpen | Verb::BeginClosed => {
+                let p0 = self.points[self.point];
                 self.point += 1;
                 self.p0 = p0;
                 IterEvent::Begin(p0, verb == Verb::BeginClosed)
@@ -86,7 +104,7 @@ impl<'p, 'a> Iter<'p, 'a> {
 
             Verb::Segment => {
                 let p0 = self.p0;
-                let p1 = path.points[self.point];
+                let p1 = self.points[self.point];
                 self.point += 1;
                 self.p0 = p1;
                 IterEvent::Segment(segment(p0, p1))
@@ -94,8 +112,8 @@ impl<'p, 'a> Iter<'p, 'a> {
 
             Verb::Quadratic => {
                 let p0 = self.p0;
-                let p1 = path.points[self.point + 0];
-                let p2 = path.points[self.point + 1];
+                let p1 = self.points[self.point + 0];
+                let p2 = self.points[self.point + 1];
                 self.point += 2;
                 self.p0 = p2;
                 IterEvent::Quadratic(quadratic(p0, p1, p2))
@@ -103,9 +121,9 @@ impl<'p, 'a> Iter<'p, 'a> {
 
             Verb::Cubic => {
                 let p0 = self.p0;
-                let p1 = path.points[self.point + 0];
-                let p2 = path.points[self.point + 1];
-                let p3 = path.points[self.point + 2];
+                let p1 = self.points[self.point + 0];
+                let p2 = self.points[self.point + 1];
+                let p3 = self.points[self.point + 2];
                 self.point += 3;
                 self.p0 = p3;
                 IterEvent::Cubic(cubic(p0, p1, p2, p3))
@@ -119,7 +137,7 @@ impl<'p, 'a> Iter<'p, 'a> {
     }
 }
 
-impl<'p, 'a> Iterator for Iter<'p, 'a> {
+impl<'p> Iterator for Iter<'p> {
     type Item = IterEvent;
 
     #[inline(always)]
@@ -129,24 +147,26 @@ impl<'p, 'a> Iterator for Iter<'p, 'a> {
 }
 
 
-pub struct PathBuilder<'a> {
-    verbs:  Vec<Verb,  &'a dyn Allocator>,
-    points: Vec<F32x2, &'a dyn Allocator>,
+pub struct PathBuilder<A: CopyAlloc> {
+    verbs:  Vec<Verb, A>,
+    points: Vec<F32x2, A>,
     aabb:   Rect,
     in_path:     Bool,
     begin_point: F32x2,
     begin_verb:  usize,
 }
 
-impl<'a> PathBuilder<'a> {
-    pub fn new() -> PathBuilder<'a> {
-        PathBuilder::new_in(&Global)
+impl PathBuilder<GlobalAlloc> {
+    pub fn new() -> Self {
+        PathBuilder::new_in(GlobalAlloc)
     }
+}
 
-    pub fn new_in(allocator: &'a dyn Allocator) -> PathBuilder<'a> {
+impl<A: CopyAlloc> PathBuilder<A> {
+    pub fn new_in(alloc: A) -> Self {
         PathBuilder {
-            verbs:  Vec::new_in(allocator),
-            points: Vec::new_in(allocator),
+            verbs:  Vec::new_in(alloc),
+            points: Vec::new_in(alloc),
             aabb:   rect(F32x2::splat(f32::MAX), F32x2::splat(f32::MIN)),
             in_path:     false,
             begin_point: F32x2::ZERO,
@@ -155,22 +175,24 @@ impl<'a> PathBuilder<'a> {
     }
 
 
-    pub fn build(mut self) -> Path<'a> {
+    pub fn build(self) -> Path<A> {
+        let alloc = *self.verbs.allocator();
+        self.build_in(alloc)
+    }
+
+    pub fn build_in<B: Alloc>(mut self, alloc: B) -> Path<B> {
         if self.in_path {
             self.verbs.push(Verb::End);
         }
-        Path {
-            verbs:  self.verbs.into_boxed_slice(),
-            points: self.points.into_boxed_slice(),
-            aabb:   self.aabb,
-        }
+
+        Path::new_in(&self.verbs, &self.points, self.aabb, alloc)
     }
 
     pub fn move_to(&mut self, p0: F32x2) {
         if self.in_path {
             self.verbs.push(Verb::End);
         }
-        self.verbs.push(Verb::Begin);
+        self.verbs.push(Verb::BeginOpen);
         self.points.push(p0);
         self.aabb.include(p0);
         self.in_path     = true;
@@ -220,9 +242,9 @@ impl<'a> PathBuilder<'a> {
 
 #[derive(Clone)]
 pub struct SoaPath<'a> {
-    pub lines:  Box<[Segment],   &'a dyn Allocator>,
-    pub quads:  Box<[Quadratic], &'a dyn Allocator>,
-    pub cubics: Box<[Cubic],     &'a dyn Allocator>,
+    pub lines:  Box<[Segment],   &'a dyn Alloc>,
+    pub quads:  Box<[Quadratic], &'a dyn Alloc>,
+    pub cubics: Box<[Cubic],     &'a dyn Alloc>,
     pub aabb:   Rect,
 }
 
@@ -254,3 +276,124 @@ impl<'a> SoaPath<'a> {
         self.aabb = aabb;
     }
 }
+
+
+
+/// Path memory layout:
+///     header: PathHeader
+///     verbs:  [Verb; header.verb_count]
+///     points: [F32x2; header.point_count]
+
+impl<A: Alloc> Path<A> {
+    pub fn new_in(verbs: &[Verb], points: &[F32x2], aabb: Rect, alloc: A) -> Self {
+        let verb_count  = verbs.len().try_into().unwrap();
+        let point_count = points.len().try_into().unwrap();
+
+        let layout = PathHeader::allocation_layout(verbs.len(), points.len());
+        let data = alloc.allocate(layout).unwrap();
+
+        // header
+        let header = data.as_ptr() as *mut PathHeader;
+        unsafe { header.write(PathHeader { verb_count, point_count, aabb }) };
+
+        // verbs
+        let vs = unsafe {
+            core::slice::from_raw_parts_mut(
+                PathHeader::verbs_begin(header) as *mut Verb,
+                verb_count as usize)
+        };
+        vs.copy_from_slice(verbs);
+
+        // points
+        let ps = unsafe {
+            core::slice::from_raw_parts_mut(
+                PathHeader::points_begin(header, verb_count as usize) as *mut F32x2,
+                point_count as usize)
+        };
+        ps.copy_from_slice(points);
+
+        Self { header: NonNull::new(header).unwrap(), alloc }
+    }
+
+
+    pub fn leak<'a>(self) -> PathRef<'a> where A: 'a {
+        let result = unsafe { &*self.header.as_ptr() };
+        let alloc = unsafe { (&self.alloc as *const A).read() };
+
+        drop(alloc);
+        std::mem::forget(self);
+
+        result
+    }
+}
+
+impl<A: Alloc> Drop for Path<A> {
+    fn drop(&mut self) {
+        let header = unsafe { self.header.as_ptr().read() };
+
+        let data = NonNull::new(self.header.as_ptr() as *mut u8).unwrap();
+        let layout = PathHeader::allocation_layout(header.verb_count as usize, header.point_count as usize);
+
+        unsafe { self.alloc.deallocate(data, layout) };
+    }
+}
+
+
+impl PathHeader {
+    #[inline(always)]
+    fn verbs_begin(header: *const PathHeader) -> *const Verb {
+        let header_end = unsafe { header.add(1) };
+        align_pointer(header_end as *const Verb)
+    }
+
+    #[inline(always)]
+    fn points_begin(header: *const PathHeader, verb_count: usize) -> *const F32x2 {
+        let verbs_begin = Self::verbs_begin(header);
+        let verbs_end = unsafe { verbs_begin.add(verb_count) };
+        align_pointer(verbs_end as *const F32x2)
+    }
+
+    #[inline(always)]
+    fn allocation_alignment() -> usize {
+        use core::mem::align_of;
+        align_of::<PathHeader>()
+        .max(align_of::<Verb>())
+        .max(align_of::<F32x2>())
+    }
+
+    #[inline(always)]
+    fn allocation_size(verb_count: usize, point_count: usize) -> usize {
+        let points_begin = Self::points_begin(0 as *const PathHeader, verb_count);
+        let points_end = unsafe { points_begin.add(point_count) };
+        align_pointer_to(points_end, Self::allocation_alignment()) as usize
+    }
+
+    #[inline(always)]
+    fn allocation_layout(verb_count: usize, point_count: usize) -> AllocLayout {
+        AllocLayout::from_size_align(
+            PathHeader::allocation_size(verb_count, point_count),
+            PathHeader::allocation_alignment()
+        ).unwrap()
+    }
+
+
+
+    #[inline(always)]
+    pub fn verbs(&self) -> &[Verb] {
+        unsafe {
+            core::slice::from_raw_parts(
+                Self::verbs_begin(self),
+                self.verb_count as usize)
+        }
+    }
+
+    #[inline(always)]
+    pub fn points(&self) -> &[F32x2] {
+        unsafe {
+            core::slice::from_raw_parts(
+                Self::points_begin(self, self.verb_count as usize),
+                self.point_count as usize)
+        }
+    }
+}
+

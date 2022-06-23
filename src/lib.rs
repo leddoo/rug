@@ -5,6 +5,7 @@
 pub use basic::*;
 pub use basic::simd::*;
 
+pub mod alloc;
 pub mod float;
 pub mod geometry;
 pub mod path;
@@ -13,6 +14,7 @@ pub mod image;
 pub mod rasterizer;
 pub mod pipeline;
 
+pub use alloc::*;
 pub use float::*;
 pub use geometry::*;
 pub use path::*;
