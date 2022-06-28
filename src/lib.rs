@@ -13,6 +13,7 @@ pub mod stroke;
 pub mod image;
 pub mod rasterizer;
 pub mod pipeline;
+pub mod renderer;
 
 pub use alloc::*;
 pub use float::*;
@@ -22,3 +23,4 @@ pub use stroke::*;
 pub use image::*;
 pub use rasterizer::*;
 pub use pipeline::*;
+pub use renderer::*;

@@ -32,6 +32,18 @@ impl Path<GlobalAlloc> {
     }
 }
 
+pub type PathRef<'p> = &'p PathHeader;
+
+impl<A: Alloc> Path<A> {
+    pub fn borrow(&self) -> PathRef {
+        unsafe { &*self.header.as_ptr() }
+    }
+}
+
+impl<A: Alloc> core::borrow::Borrow<PathHeader> for Path<A> {
+    fn borrow(&self) -> PathRef { self.borrow() }
+}
+
 
 pub struct PathHeader {
     verb_count: U32,
@@ -50,8 +62,6 @@ impl PathHeader {
         Iter::new(self)
     }
 }
-
-pub type PathRef<'p> = &'p PathHeader;
 
 
 pub enum IterEvent {

@@ -203,7 +203,7 @@ unsafe fn _fill_pixels(window: HWND, buffer: &[u32], x: i32, y: i32, w: u32, h: 
         bmiHeader: BITMAPINFOHEADER {
             biSize:        core::mem::size_of::<BITMAPINFOHEADER>() as u32,
             biWidth:       w as i32,
-            biHeight:      -(h as i32),
+            biHeight:      h as i32,
             biPlanes:      1,
             biBitCount:    32,
             biCompression: BI_RGB as u32,

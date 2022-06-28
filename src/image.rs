@@ -5,7 +5,7 @@ use alloc::{
     vec::Vec,
 };
 
-use crate::simd::*;
+use basic::{*, simd::*};
 use core::simd::{LaneCount, SupportedLaneCount};
 
 
@@ -182,6 +182,25 @@ impl<'a, const N: usize> core::ops::IndexMut<(usize, usize)> for Image_rgba_f32x
     }
 }
 
+
+
+#[inline(always)]
+pub fn argb_unpack(v: U32) -> F32x4 {
+    let a = (v >> 24) & 0xff;
+    let r = (v >> 16) & 0xff;
+    let g = (v >>  8) & 0xff;
+    let b = (v >>  0) & 0xff;
+
+    let color = U32x4::new(r, g, b, a);
+    let scale = F32x4::splat(255.0);
+    color.as_i32().to_f32() / scale
+}
+
+#[inline(always)]
+pub fn argb_pack_u8s(r: U8, g: U8, b: U8, a: U8) -> U32 {
+    let (r, g, b, a) = (r as U32, g as U32, b as U32, a as U32);
+    a << 24 | r << 16 | g << 8 | b
+}
 
 
 #[inline(always)]

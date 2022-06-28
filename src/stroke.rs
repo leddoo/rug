@@ -8,6 +8,21 @@ use crate::path::*;
 use crate::rasterizer::ZERO_TOLERANCE_SQ;
 
 
+#[derive(Clone, Copy, Debug)]
+pub enum CapStyle {
+    Butt,
+    Square,
+    Round,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum JoinStyle {
+    Bevel,
+    Miter,
+    Round,
+}
+
+
 pub fn stroke_path(path: PathRef, width: F32) -> SoaPath<'static> {
     stroke_path_in(path, width, &Global)
 }

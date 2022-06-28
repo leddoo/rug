@@ -1,10 +1,18 @@
 todo:
-- simple command buffer.
-    - `Vec<Command>`.
-    - with `PathRef`s.
-    - `U32` color.
-    - command bit vector.
-        - because it doesn't matter that much and much easier to multi-thread.
+- command buffer.
+    - consider stages (for manually chaining command buffers).
+    - "config":
+        - initial transform.
+        - clear color.
+        - tile size (optional tiling?).
+        - allocator.
+    - thread pool interface.
+- stroker trait.
+- ad-hoc stroking.
+- clean up:
+    - color module.
+    - use logfiler: bring back drawing metrics & other diagnostics.
+
 
 command buffer.
 - state:
@@ -12,18 +20,12 @@ command buffer.
     - composition function.
     - clip rect/path.
 - fill params:
-    - path (or other shape).
-        - thinking paths external.
-        - because even `Path` is huge (currently 80 bytes).
-        - and not POD.
+    - shape.
     - shader.
         - variable length, commonly shared -> external.
         - put shader type into command, separate arrays.
-        - U32 for solid color for now. 1/4 the memory. matters because inline.
-    - fill rule.
-        - single bit, put into command.
 - stroke params:
-    - path.
+    - shape.
     - shader.
     - cap/join style.
         - 2 + 2 bits.
