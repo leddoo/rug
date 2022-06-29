@@ -1,7 +1,7 @@
 extern crate alloc;
 use alloc::alloc::*;
 
-use basic::{*, simd::*};
+use sti::simd::*;
 
 use crate::geometry::*;
 use crate::path::*;
@@ -23,11 +23,11 @@ pub enum JoinStyle {
 }
 
 
-pub fn stroke_path(path: PathRef, width: F32) -> SoaPath<'static> {
+pub fn stroke_path(path: PathRef, width: f32) -> SoaPath<'static> {
     stroke_path_in(path, width, &Global)
 }
 
-pub fn stroke_path_in<'a>(path: PathRef, width: F32, allocator: &'a dyn Allocator) -> SoaPath<'a> {
+pub fn stroke_path_in<'a>(path: PathRef, width: f32, allocator: &'a dyn Allocator) -> SoaPath<'a> {
     let mut stroker = Stroker {
         left:   width/2.0,
         right: -width/2.0,
@@ -56,14 +56,14 @@ struct Stroker<'a> {
     quads: Vec<Quadratic, &'a dyn Allocator>,
     aabb: Rect,
 
-    pub left:   F32,
-    pub right:  F32,
-    pub closed: Bool,
+    pub left:   f32,
+    pub right:  f32,
+    pub closed: bool,
 
-    pub tolerance_sq:  F32,
-    pub max_recursion: U32,
+    pub tolerance_sq:  f32,
+    pub max_recursion: u32,
 
-    has_prev:    Bool,
+    has_prev:    bool,
     prev_left:   F32x2,
     prev_right:  F32x2,
     first_left:  F32x2,
@@ -105,7 +105,7 @@ impl<'a> Stroker<'a> {
     }
 
     #[inline(always)]
-    fn begin_path(&mut self, closed: Bool) {
+    fn begin_path(&mut self, closed: bool) {
         self.has_prev = false;
         self.closed = closed;
     }
@@ -206,7 +206,7 @@ impl<'a> Stroker<'a> {
     }
 
     #[inline(never)]
-    fn _quadratic(&mut self, quadratic: Quadratic, tolerance_sq: F32, max_recursion: u32) {
+    fn _quadratic(&mut self, quadratic: Quadratic, tolerance_sq: f32, max_recursion: u32) {
         let Quadratic { p0, p1, p2 } = quadratic;
 
         if (p2 - p0).length_squared() <= ZERO_TOLERANCE_SQ {

@@ -2,9 +2,6 @@
 #![feature(allocator_api)]
 #![feature(portable_simd)]
 
-pub use basic::*;
-pub use basic::simd::*;
-
 pub mod alloc;
 pub mod float;
 pub mod geometry;

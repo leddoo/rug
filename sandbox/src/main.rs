@@ -3,6 +3,7 @@
 
 mod win32;
 
+use sti::simd::*;
 use rug::*;
 
 fn main() {

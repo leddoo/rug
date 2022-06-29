@@ -5,8 +5,7 @@ use alloc::{
     vec::Vec,
 };
 
-use basic::{*, simd::*};
-use core::simd::{LaneCount, SupportedLaneCount};
+use sti::simd::*;
 
 
 pub type Mask<'a>   = Image_a_f32<'a>;
@@ -185,7 +184,7 @@ impl<'a, const N: usize> core::ops::IndexMut<(usize, usize)> for Image_rgba_f32x
 
 
 #[inline(always)]
-pub fn argb_unpack(v: U32) -> F32x4 {
+pub fn argb_unpack(v: u32) -> F32x4 {
     let a = (v >> 24) & 0xff;
     let r = (v >> 16) & 0xff;
     let g = (v >>  8) & 0xff;
@@ -197,8 +196,8 @@ pub fn argb_unpack(v: U32) -> F32x4 {
 }
 
 #[inline(always)]
-pub fn argb_pack_u8s(r: U8, g: U8, b: U8, a: U8) -> U32 {
-    let (r, g, b, a) = (r as U32, g as U32, b as U32, a as U32);
+pub fn argb_pack_u8s(r: u8, g: u8, b: u8, a: u8) -> u32 {
+    let (r, g, b, a) = (r as u32, g as u32, b as u32, a as u32);
     a << 24 | r << 16 | g << 8 | b
 }
 

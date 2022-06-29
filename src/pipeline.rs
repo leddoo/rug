@@ -1,4 +1,4 @@
-use crate::simd::*;
+use sti::simd::*;
 use crate::image::*;
 
 

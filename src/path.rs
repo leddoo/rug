@@ -1,6 +1,6 @@
 use core::ptr::NonNull;
 
-use basic::{*, simd::*};
+use sti::simd::*;
 use crate::alloc::*;
 use crate::geometry::*;
 
@@ -46,8 +46,8 @@ impl<A: Alloc> core::borrow::Borrow<PathHeader> for Path<A> {
 
 
 pub struct PathHeader {
-    verb_count: U32,
-    point_count: U32,
+    verb_count: u32,
+    point_count: u32,
     aabb: Rect,
 }
 
@@ -65,7 +65,7 @@ impl PathHeader {
 
 
 pub enum IterEvent {
-    Begin     (F32x2, Bool), // first-point, closed
+    Begin     (F32x2, bool), // first-point, closed
     Segment   (Segment),
     Quadratic (Quadratic),
     Cubic     (Cubic),
@@ -161,7 +161,7 @@ pub struct PathBuilder<A: CopyAlloc> {
     verbs:  Vec<Verb, A>,
     points: Vec<F32x2, A>,
     aabb:   Rect,
-    in_path:     Bool,
+    in_path:     bool,
     begin_point: F32x2,
     begin_verb:  usize,
 }
@@ -331,7 +331,7 @@ impl<A: Alloc> Path<A> {
         let alloc = unsafe { (&self.alloc as *const A).read() };
 
         drop(alloc);
-        std::mem::forget(self);
+        core::mem::forget(self);
 
         result
     }

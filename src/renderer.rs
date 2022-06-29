@@ -1,6 +1,6 @@
 use core::sync::atomic::{AtomicU64, Ordering};
 
-use basic::{*, simd::*};
+use sti::simd::*;
 
 use crate::{
     alloc::{CopyAlloc, GlobalAlloc},
@@ -17,13 +17,13 @@ use crate::{
 pub enum Command<'p> {
     FillPathSolid {
         path:  PathRef<'p>,
-        color: U32,
+        color: u32,
         rule:  FillRule,
     },
     StrokePathSolid {
         path:  PathRef<'p>,
-        color: U32,
-        width: F32,
+        color: u32,
+        width: f32,
         cap:   CapStyle,
         join:  JoinStyle,
     },
@@ -104,8 +104,8 @@ impl<'ps, A: CopyAlloc> CommandBuffer<'ps, A> {
             fn fill_visible(visible: &Vec<CommandMask>, cmd_index: usize, path_aabb: Rect,
                 tile_size: u32, tiles_x: u32, tiles_y: u32
             ) {
-                let tiles_end = F32x2::new(tiles_x as F32, tiles_y as F32);
-                let tile_size = F32x2::splat(tile_size as F32);
+                let tiles_end = F32x2::new(tiles_x as f32, tiles_y as f32);
+                let tile_size = F32x2::splat(tile_size as f32);
 
                 let rect = rect(path_aabb.min / tile_size, path_aabb.max / tile_size);
                 let rect = unsafe { rect.round_inclusive_unck() };
@@ -172,13 +172,13 @@ impl<'ps, A: CopyAlloc> CommandBuffer<'ps, A> {
                     let aabb = unsafe { aabb.clamp_to(tile).round_inclusive_unck() };
 
                     const N: usize = Target::simd_width();
-                    const NF32: f32 = N as F32;
+                    const NF32: f32 = N as f32;
 
                     let x0 = floor_fast(aabb.min.x() / NF32) * NF32;
                     let x1 = ceil_fast(aabb.max.x() / NF32)  * NF32;
 
-                    let mask_w = (x1 - x0)     as U32;
-                    let mask_h = aabb.height() as U32;
+                    let mask_w = (x1 - x0)     as u32;
+                    let mask_h = aabb.height() as u32;
                     if mask_w == 0 || mask_h == 0 {
                         return None;
                     }
@@ -205,7 +205,7 @@ pub struct RenderTarget {
 }
 
 impl RenderTarget {
-    pub fn new(w: U32, h: U32) -> Self {
+    pub fn new(w: u32, h: u32) -> Self {
         let mut data = vec![];
         data.resize((w*h) as usize, 0);
         Self { data, size: U32x2::new(w, h) }
@@ -264,7 +264,7 @@ impl CommandMask {
 
     #[inline(always)]
     fn add(&self, index: usize) {
-        let bit = 1 << (index as U64 % 64);
+        let bit = 1 << (index as u64 % 64);
         self.values[index / 64].fetch_or(bit, Ordering::Relaxed);
     }
 

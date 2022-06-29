@@ -1,7 +1,7 @@
 extern crate alloc;
 use alloc::alloc::*;
 
-use basic::{*, simd::*};
+use sti::simd::*;
 
 use crate::float::*;
 use crate::geometry::*;
@@ -30,7 +30,7 @@ pub struct Rasterizer<'a> {
     deltas: Mask<'a>,
     size: F32x2,
     safe_size: F32x2,
-    deltas_len: I32,
+    deltas_len: i32,
     buffer: [[F32x2; 2]; BUFFER_SIZE],
     buffered: usize,
 }
@@ -294,7 +294,7 @@ impl<'a> Rasterizer<'a> {
 
     }
 
-    pub unsafe fn add_left_delta_bounded(&mut self, y0: F32, y1: F32) {
+    pub unsafe fn add_left_delta_bounded(&mut self, y0: f32, y1: f32) {
         debug_assert!(self.are_bounded(&[F32x2::new(0.0, y0), F32x2::new(0.0, y1)]));
         //println!("Segment(({}, {}), ({}, {})),", 0.0, y0, 0.0, y1);
 
@@ -342,7 +342,7 @@ impl<'a> Rasterizer<'a> {
         }
     }
 
-    pub fn add_left_delta(&mut self, y0: F32, y1: F32) {
+    pub fn add_left_delta(&mut self, y0: f32, y1: f32) {
         let y0 = y0.clamp(0.0, self.size.y());
         let y1 = y1.clamp(0.0, self.size.y());
         unsafe { self.add_left_delta_bounded(y0, y1) }
@@ -517,18 +517,18 @@ impl<'a> Rasterizer<'a> {
 
 
     #[inline(always)]
-    pub fn is_invisible(&self, aabb: Rect) -> Bool {
+    pub fn is_invisible(&self, aabb: Rect) -> bool {
         aabb.min.lanes_ge(self.size).any() || aabb.max.y() <= 0.0
     }
 
     #[inline(always)]
-    pub fn is_bounded(&self, p0: F32x2) -> Bool {
+    pub fn is_bounded(&self, p0: F32x2) -> bool {
         let safe_rect = rect(F32x2::ZERO, self.safe_size);
         safe_rect.contains(p0)
     }
 
     #[inline(always)]
-    pub fn are_bounded(&self, ps: &[F32x2]) -> Bool {
+    pub fn are_bounded(&self, ps: &[F32x2]) -> bool {
         ps.iter().all(|p| self.is_bounded(*p))
     }
 }

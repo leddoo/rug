@@ -4,5 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-basic = { version = "0.1.0", git = "https://github.com/leddoo/basic-rs.git" }
+sti = { version = "0.2.0", git = "https://github.com/leddoo/sti.git" }
 libm = "0.2.2"

@@ -1,4 +1,4 @@
-use basic::{*, simd::*};
+use sti::simd::*;
 use crate::float::*;
 
 
@@ -62,12 +62,12 @@ impl Rect {
     }
 
     #[inline(always)]
-    pub fn width(self) -> F32 {
+    pub fn width(self) -> f32 {
         self.size().x()
     }
 
     #[inline(always)]
-    pub fn height(self) -> F32 {
+    pub fn height(self) -> f32 {
         self.size().y()
     }
 }
@@ -86,12 +86,12 @@ pub fn segment(p0: F32x2, p1: F32x2) -> Segment {
 
 impl Segment {
     #[inline(always)]
-    pub fn normal(self, tolerance_squared: F32) -> Option<F32x2> {
+    pub fn normal(self, tolerance_squared: f32) -> Option<F32x2> {
         (self.p1 - self.p0).left_normal(tolerance_squared)
     }
 
     #[inline(always)]
-    pub fn offset(self, normal: F32x2, distance: F32) -> Segment {
+    pub fn offset(self, normal: F32x2, distance: f32) -> Segment {
         self + distance.mul(normal)
     }
 
@@ -143,14 +143,14 @@ pub fn quadratic(p0: F32x2, p1: F32x2, p2: F32x2) -> Quadratic {
 
 impl Quadratic {
     #[inline(always)]
-    pub fn eval(self, t: F32) -> F32x2 {
+    pub fn eval(self, t: f32) -> F32x2 {
         let l10 = self.p0.lerpf(self.p1, t);
         let l11 = self.p1.lerpf(self.p2, t);
         l10.lerpf(l11, t)
     }
 
     #[inline(always)]
-    pub fn split(self, t: F32) -> (Quadratic, Quadratic) {
+    pub fn split(self, t: f32) -> (Quadratic, Quadratic) {
         let l10 = self.p0.lerpf(self.p1, t);
         let l11 = self.p1.lerpf(self.p2, t);
         let l20 = l10.lerpf(l11, t);
@@ -180,14 +180,14 @@ impl Quadratic {
 
 
     #[inline(always)]
-    pub fn normals(self, tolerance_squared: F32) -> (Option<F32x2>, Option<F32x2>) {
+    pub fn normals(self, tolerance_squared: f32) -> (Option<F32x2>, Option<F32x2>) {
         ((self.p1 - self.p0).left_normal(tolerance_squared),
          (self.p2 - self.p1).left_normal(tolerance_squared))
     }
 
     pub fn offset<F: FnMut(Quadratic, u32)>(
-        self, f: &mut F, normal_start: F32x2, normal_end: F32x2, distance: F32,
-        tolerance_squared: F32, max_recursion: u32
+        self, f: &mut F, normal_start: F32x2, normal_end: F32x2, distance: f32,
+        tolerance_squared: f32, max_recursion: u32
     ) {
         debug_assert!((self.p2 - self.p0).length_squared() > tolerance_squared);
 
@@ -537,7 +537,7 @@ impl Transform {
     pub const ID: Transform = Transform::scale(1.0);
 
     #[inline(always)]
-    pub const fn scale(s: F32) -> Transform {
+    pub const fn scale(s: f32) -> Transform {
         Transform { columns: [
             F32x2::from_array([  s, 0.0]),
             F32x2::from_array([0.0,   s]), 
