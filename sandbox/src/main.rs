@@ -124,7 +124,7 @@ fn program() {
 }
 
 
-fn parse_xml(xml: &str) -> CommandBuffer<'static, alloc::GlobalAlloc> {
+fn parse_xml(xml: &str) -> CommandBuffer<alloc::GlobalAlloc> {
     let xml = roxmltree::Document::parse(xml).unwrap();
 
     let root = xml.root();
@@ -135,6 +135,8 @@ fn parse_xml(xml: &str) -> CommandBuffer<'static, alloc::GlobalAlloc> {
     for child in svg.children() {
         render(&mut result, child);
     }
+
+    return result;
 
     fn render(result: &mut CommandBuffer<GlobalAlloc>, node: roxmltree::Node) -> Option<()> {
         if !node.is_element() {
@@ -198,7 +200,7 @@ fn parse_xml(xml: &str) -> CommandBuffer<'static, alloc::GlobalAlloc> {
                     }
                 }
 
-                let path = pb.build().leak();
+                let path = pb.build();
 
                 if let Some(fill) = node.attribute("fill") {
                     if let Ok(color) = svgtypes::Color::from_str(fill) {
@@ -215,7 +217,7 @@ fn parse_xml(xml: &str) -> CommandBuffer<'static, alloc::GlobalAlloc> {
                         let color = argb_pack_u8s(color.red, color.green, color.blue, a);
 
                         result.add(Command::FillPathSolid {
-                            path,
+                            path: path.clone(),
                             color,
                             rule: FillRule::NonZero,
                         });
@@ -248,7 +250,7 @@ fn parse_xml(xml: &str) -> CommandBuffer<'static, alloc::GlobalAlloc> {
                         let color = argb_pack_u8s(color.red, color.green, color.blue, a);
 
                         result.add(Command::StrokePathSolid {
-                            path,
+                            path: path.clone(),
                             color,
                             width,
                             cap: CapStyle::Butt,
@@ -268,7 +270,5 @@ fn parse_xml(xml: &str) -> CommandBuffer<'static, alloc::GlobalAlloc> {
 
         Some(())
     }
-
-    result
 }
 

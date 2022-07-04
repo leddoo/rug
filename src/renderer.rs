@@ -3,7 +3,7 @@ use core::sync::atomic::{AtomicU64, Ordering};
 use sti::simd::*;
 
 use crate::{
-    alloc::{CopyAlloc, GlobalAlloc},
+    alloc::*,
     float::*,
     geometry::{rect, Rect, Transform},
     image::*,
@@ -14,14 +14,14 @@ use crate::{
 };
 
 
-pub enum Command<'p> {
+pub enum Command<A: Alloc> {
     FillPathSolid {
-        path:  PathRef<'p>,
+        path:  Path<A>,
         color: u32,
         rule:  FillRule,
     },
     StrokePathSolid {
-        path:  PathRef<'p>,
+        path:  Path<A>,
         color: u32,
         width: f32,
         cap:   CapStyle,
@@ -30,43 +30,26 @@ pub enum Command<'p> {
 }
 
 
-pub struct CommandBuffer<'ps, A: CopyAlloc> {
-    commands: Vec<Command<'ps>, A>,
-    owned_paths: Vec<Path<A>, A>,
+pub struct CommandBuffer<A: Alloc> {
+    commands: Vec<Command<A>, A>,
 }
 
-impl<'ps> CommandBuffer<'ps, GlobalAlloc> {
+impl CommandBuffer<GlobalAlloc> {
     pub fn new() -> Self {
         CommandBuffer::new_in(GlobalAlloc)
     }
 }
 
 
-impl<'ps, A: CopyAlloc> CommandBuffer<'ps, A> {
+impl<A: Alloc> CommandBuffer<A> {
     pub fn new_in(alloc: A) -> Self {
         Self {
             commands: Vec::new_in(alloc),
-            owned_paths: Vec::new_in(alloc),
         }
     }
 
-    // unsound. creates a ref with the "outer lifetime".
-    // but this is trying to say "this path lives as long as the struct,
-    // therefore it can be used to construct a Command<'ps>."
-    // don't think this is fixable. if there was another lifetime 'self,
-    // the only thing constraining that would be Self::add, which would
-    // force it to be 'ps.
-    // only alternative i see is interior mutability and returning a
-    // pathref with the self lifetime. but that of course makes the
-    // command buffer mutable, which is dumb.
-    pub unsafe fn add_path(&mut self, path: Path<A>) -> PathRef<'ps> {
-        let result = &*(path.borrow() as *const PathHeader);
-        self.owned_paths.push(path);
-        result
-    }
-
     #[inline(always)]
-    pub fn add(&mut self, command: Command<'ps>) {
+    pub fn add(&mut self, command: Command<A>) {
         self.commands.push(command);
     }
 

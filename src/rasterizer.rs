@@ -1,9 +1,7 @@
-extern crate alloc;
-use alloc::alloc::*;
-
 use sti::simd::*;
 
 use crate::float::*;
+use crate::alloc::*;
 use crate::geometry::*;
 use crate::path::*;
 use crate::image::{Mask};
@@ -38,10 +36,10 @@ pub struct Rasterizer<'a> {
 
 impl<'a> Rasterizer<'a> {
     pub fn new(width: u32, height: u32) -> Rasterizer<'a> {
-        Rasterizer::new_in(width, height, &Global)
+        Rasterizer::new_in(width, height, &GlobalAlloc)
     }
 
-    pub fn new_in(width: u32, height: u32, allocator: &'a dyn Allocator) -> Rasterizer<'a> {
+    pub fn new_in(width: u32, height: u32, allocator: &'a dyn Alloc) -> Rasterizer<'a> {
         let size = F32x2::new(width as f32, height as f32);
         let deltas = Mask::new_in(width + 2, height + 1, allocator);
         let deltas_len = deltas.data.len().try_into().unwrap();
@@ -479,7 +477,7 @@ impl<'a> Rasterizer<'a> {
     }
 
 
-    pub fn fill_path(&mut self, path: PathRef, position: F32x2) {
+    pub fn fill_path<A: Alloc>(&mut self, path: &Path<A>, position: F32x2) {
         for event in path.iter() {
             use IterEvent::*;
             match event {
@@ -491,7 +489,7 @@ impl<'a> Rasterizer<'a> {
         }
     }
 
-    pub fn fill_path_tfx(&mut self, path: PathRef, tfx: Transform) {
+    pub fn fill_path_tfx<A: Alloc>(&mut self, path: &Path<A>, tfx: Transform) {
         for event in path.iter() {
             use IterEvent::*;
             match event {

@@ -1,8 +1,6 @@
-extern crate alloc;
-use alloc::alloc::*;
-
 use sti::simd::*;
 
+use crate::alloc::*;
 use crate::geometry::*;
 use crate::path::*;
 use crate::rasterizer::ZERO_TOLERANCE_SQ;
@@ -23,11 +21,11 @@ pub enum JoinStyle {
 }
 
 
-pub fn stroke_path(path: PathRef, width: f32) -> SoaPath<'static> {
-    stroke_path_in(path, width, &Global)
+pub fn stroke_path<A: Alloc>(path: &Path<A>, width: f32) -> SoaPath<'static> {
+    stroke_path_in(path, width, &GlobalAlloc)
 }
 
-pub fn stroke_path_in<'a>(path: PathRef, width: f32, allocator: &'a dyn Allocator) -> SoaPath<'a> {
+pub fn stroke_path_in<'a, A: Alloc>(path: &Path<A>, width: f32, allocator: &'a dyn Alloc) -> SoaPath<'a> {
     let mut stroker = Stroker {
         left:   width/2.0,
         right: -width/2.0,
@@ -52,8 +50,8 @@ pub fn stroke_path_in<'a>(path: PathRef, width: f32, allocator: &'a dyn Allocato
 
 
 struct Stroker<'a> {
-    lines: Vec<Segment,   &'a dyn Allocator>,
-    quads: Vec<Quadratic, &'a dyn Allocator>,
+    lines: Vec<Segment,   &'a dyn Alloc>,
+    quads: Vec<Quadratic, &'a dyn Alloc>,
     aabb: Rect,
 
     pub left:   f32,
@@ -71,7 +69,7 @@ struct Stroker<'a> {
 }
 
 impl<'a> Stroker<'a> {
-    fn default(allocator: &'a dyn Allocator) -> Self {
+    fn default(allocator: &'a dyn Alloc) -> Self {
         Self {
             lines: Vec::new_in(allocator),
             quads: Vec::new_in(allocator),

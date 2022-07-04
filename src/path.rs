@@ -1,4 +1,5 @@
 use core::ptr::NonNull;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use sti::simd::*;
 use crate::alloc::*;
@@ -22,9 +23,11 @@ pub enum Verb {
 
 
 pub struct Path<A: Alloc> {
-    header: NonNull<PathHeader>,
-    alloc: A,
+    header: NonNull<PathHeader<A>>,
 }
+
+unsafe impl<A: Alloc> Send for Path<A> {}
+unsafe impl<A: Alloc> Sync for Path<A> {}
 
 impl Path<GlobalAlloc> {
     pub fn new(verbs: &[Verb], points: &[F32x2], aabb: Rect) -> Self {
@@ -32,35 +35,13 @@ impl Path<GlobalAlloc> {
     }
 }
 
-pub type PathRef<'p> = &'p PathHeader;
 
-impl<A: Alloc> Path<A> {
-    pub fn borrow(&self) -> PathRef {
-        unsafe { &*self.header.as_ptr() }
-    }
-}
-
-impl<A: Alloc> core::borrow::Borrow<PathHeader> for Path<A> {
-    fn borrow(&self) -> PathRef { self.borrow() }
-}
-
-
-pub struct PathHeader {
+pub struct PathHeader<A: Alloc> {
+    alloc: A,
+    references: AtomicU32,
     verb_count: u32,
     point_count: u32,
     aabb: Rect,
-}
-
-impl PathHeader {
-    #[inline(always)]
-    pub fn aabb(&self) -> Rect {
-        self.aabb
-    }
-
-    #[inline(always)]
-    pub fn iter(&self) -> Iter {
-        Iter::new(self)
-    }
 }
 
 
@@ -82,7 +63,7 @@ pub struct Iter<'p> {
 
 impl<'p> Iter<'p> {
     #[inline(always)]
-    pub fn new(path: PathRef<'p>) -> Self {
+    pub fn new<A: Alloc>(path: &'p Path<A>) -> Self {
         Iter {
             verbs:  path.verbs(),
             points: path.points(),
@@ -299,12 +280,16 @@ impl<A: Alloc> Path<A> {
         let verb_count  = verbs.len().try_into().unwrap();
         let point_count = points.len().try_into().unwrap();
 
-        let layout = PathHeader::allocation_layout(verbs.len(), points.len());
+        let layout = <PathHeader<A>>::allocation_layout(verbs.len(), points.len());
         let data = alloc.allocate(layout).unwrap();
 
         // header
-        let header = data.as_ptr() as *mut PathHeader;
-        unsafe { header.write(PathHeader { verb_count, point_count, aabb }) };
+        let header = data.as_ptr() as *mut PathHeader<A>;
+        unsafe { header.write(PathHeader {
+            alloc,
+            references: AtomicU32::new(1),
+            verb_count, point_count, aabb,
+        }) };
 
         // verbs
         let vs = unsafe {
@@ -322,42 +307,71 @@ impl<A: Alloc> Path<A> {
         };
         ps.copy_from_slice(points);
 
-        Self { header: NonNull::new(header).unwrap(), alloc }
+        Self { header: NonNull::new(header).unwrap() }
     }
 
 
-    pub fn leak<'a>(self) -> PathRef<'a> where A: 'a {
-        let result = unsafe { &*self.header.as_ptr() };
-        let alloc = unsafe { (&self.alloc as *const A).read() };
+    #[inline(always)]
+    pub fn iter(&self) -> Iter {
+        Iter::new(self)
+    }
 
-        drop(alloc);
-        core::mem::forget(self);
+    #[inline(always)]
+    pub fn aabb(&self) -> Rect {
+        unsafe { (&*self.header.as_ptr()).aabb }
+    }
 
-        result
+    #[inline(always)]
+    pub fn verbs(&self) -> &[Verb] {
+        unsafe { (&*self.header.as_ptr()).verbs() }
+    }
+
+    #[inline(always)]
+    pub fn points(&self) -> &[F32x2] {
+        unsafe { (&*self.header.as_ptr()).points() }
+    }
+}
+
+impl<A: Alloc> Clone for Path<A> {
+    fn clone(&self) -> Self {
+        let header = unsafe { &*self.header.as_ptr() };
+        let old_refs = header.references.fetch_add(1, Ordering::Relaxed);
+        assert!(old_refs > 0 && old_refs < u32::MAX);
+
+        Self { header: self.header }
     }
 }
 
 impl<A: Alloc> Drop for Path<A> {
     fn drop(&mut self) {
-        let header = unsafe { self.header.as_ptr().read() };
 
-        let data = NonNull::new(self.header.as_ptr() as *mut u8).unwrap();
-        let layout = PathHeader::allocation_layout(header.verb_count as usize, header.point_count as usize);
+        let header = unsafe { &*self.header.as_ptr() };
+        let old_refs = header.references.fetch_sub(1, Ordering::Relaxed);
+        assert!(old_refs > 0);
 
-        unsafe { self.alloc.deallocate(data, layout) };
+        if old_refs == 1 {
+            let header = unsafe { self.header.as_ptr().read() };
+            let alloc = &header.alloc;
+
+            let data = NonNull::new(self.header.as_ptr() as *mut u8).unwrap();
+            let layout = <PathHeader<A>>::allocation_layout(header.verb_count as usize, header.point_count as usize);
+            unsafe { alloc.deallocate(data, layout) };
+
+            drop(header);
+        }
     }
 }
 
 
-impl PathHeader {
+impl<A: Alloc> PathHeader<A> {
     #[inline(always)]
-    fn verbs_begin(header: *const PathHeader) -> *const Verb {
+    fn verbs_begin(header: *const Self) -> *const Verb {
         let header_end = unsafe { header.add(1) };
         align_pointer(header_end as *const Verb)
     }
 
     #[inline(always)]
-    fn points_begin(header: *const PathHeader, verb_count: usize) -> *const F32x2 {
+    fn points_begin(header: *const Self, verb_count: usize) -> *const F32x2 {
         let verbs_begin = Self::verbs_begin(header);
         let verbs_end = unsafe { verbs_begin.add(verb_count) };
         align_pointer(verbs_end as *const F32x2)
@@ -366,14 +380,14 @@ impl PathHeader {
     #[inline(always)]
     fn allocation_alignment() -> usize {
         use core::mem::align_of;
-        align_of::<PathHeader>()
+        align_of::<Self>()
         .max(align_of::<Verb>())
         .max(align_of::<F32x2>())
     }
 
     #[inline(always)]
     fn allocation_size(verb_count: usize, point_count: usize) -> usize {
-        let points_begin = Self::points_begin(0 as *const PathHeader, verb_count);
+        let points_begin = Self::points_begin(0 as *const Self, verb_count);
         let points_end = unsafe { points_begin.add(point_count) };
         align_pointer_to(points_end, Self::allocation_alignment()) as usize
     }
@@ -381,11 +395,10 @@ impl PathHeader {
     #[inline(always)]
     fn allocation_layout(verb_count: usize, point_count: usize) -> AllocLayout {
         AllocLayout::from_size_align(
-            PathHeader::allocation_size(verb_count, point_count),
-            PathHeader::allocation_alignment()
+            Self::allocation_size(verb_count, point_count),
+            Self::allocation_alignment()
         ).unwrap()
     }
-
 
 
     #[inline(always)]

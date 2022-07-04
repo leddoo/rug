@@ -1,11 +1,5 @@
-extern crate alloc;
-use alloc::{
-    alloc::{Allocator, Global},
-    boxed::Box,
-    vec::Vec,
-};
-
 use sti::simd::*;
+use crate::alloc::*;
 
 
 pub type Mask<'a>   = Image_a_f32<'a>;
@@ -13,7 +7,7 @@ pub type Target<'a> = Image_rgba_f32x<'a, 8>;
 
 
 
-fn new_slice_box<T: Default + Copy>(length: usize, allocator: &dyn Allocator) -> Box<[T], &dyn Allocator> {
+fn new_slice_box<T: Default + Copy>(length: usize, allocator: &dyn Alloc) -> Box<[T], &dyn Alloc> {
     let mut data = Vec::new_in(allocator);
     data.resize(length, Default::default());
     data.into_boxed_slice()
@@ -55,17 +49,17 @@ macro_rules! image_impl_bounds {
 
 #[allow(non_camel_case_types)]
 pub struct Image_a_f32<'a> {
-    pub(crate) data: Box<[f32], &'a dyn Allocator>,
+    pub(crate) data: Box<[f32], &'a dyn Alloc>,
     bounds: U32x2,
     stride: usize,
 }
 
 impl<'a> Image_a_f32<'a> {
     pub fn new(width: u32, height: u32) -> Image_a_f32<'a> {
-        Image_a_f32::new_in(width, height, &Global)
+        Image_a_f32::new_in(width, height, &GlobalAlloc)
     }
 
-    pub fn new_in(width: u32, height: u32, allocator: &'a dyn Allocator) -> Image_a_f32<'a> {
+    pub fn new_in(width: u32, height: u32, allocator: &'a dyn Alloc) -> Image_a_f32<'a> {
         Image_a_f32 {
             data:   new_slice_box((width*height) as usize, allocator),
             bounds: [width, height].into(),
@@ -127,7 +121,7 @@ impl<'a> core::ops::IndexMut<(usize, usize)> for Image_a_f32<'a> {
 
 #[allow(non_camel_case_types)]
 pub struct Image_rgba_f32x<'a, const N: usize> where LaneCount<N>: SupportedLaneCount {
-    pub(crate) data: Box<[[F32x<N>; 4]], &'a dyn Allocator>,
+    pub(crate) data: Box<[[F32x<N>; 4]], &'a dyn Alloc>,
     bounds: U32x2,
     stride: usize,
 }
@@ -136,10 +130,10 @@ impl<'a, const N: usize> Image_rgba_f32x<'a, N> where LaneCount<N>: SupportedLan
     pub const fn simd_width() -> usize { N }
 
     pub fn new(width: u32, height: u32) -> Image_rgba_f32x<'a, N> {
-        Image_rgba_f32x::new_in(width, height, &Global)
+        Image_rgba_f32x::new_in(width, height, &GlobalAlloc)
     }
 
-    pub fn new_in(width: u32, height: u32, allocator: &'a dyn Allocator) -> Image_rgba_f32x<'a, N> {
+    pub fn new_in(width: u32, height: u32, allocator: &'a dyn Alloc) -> Image_rgba_f32x<'a, N> {
         let stride = (width as usize + N-1) / N;
         Image_rgba_f32x {
             data:   new_slice_box(stride * height as usize, allocator),
