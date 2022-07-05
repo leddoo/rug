@@ -128,7 +128,7 @@ impl<A: Alloc> CommandBuffer<A> {
                         let r = rasterize(tile_rect, aabb, |p0, r| {
                             let mut tfx = tfx;
                             tfx.columns[2] -= p0;
-                            r.fill_path_tfx(path, tfx)
+                            r.fill_path(path, tfx)
                         });
 
                         if let Some((offset, mask)) = r {

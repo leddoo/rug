@@ -47,7 +47,7 @@ impl<'a> Rasterizer<'a> {
             flatten_tolerance: FLATTEN_TOLERANCE,
             flatten_recursion: FLATTEN_RECURSION,
             deltas,
-            size: size,
+            size,
             safe_size: size + F32x2::splat(0.9),
             deltas_len,
             buffer: [[F32x2::ZERO; 2]; BUFFER_SIZE],
@@ -477,26 +477,28 @@ impl<'a> Rasterizer<'a> {
     }
 
 
-    pub fn fill_path<A: Alloc>(&mut self, path: &Path<A>, position: F32x2) {
-        for event in path.iter() {
-            use IterEvent::*;
-            match event {
-                Segment(segment)     => { self.add_segment(segment + -position); },
-                Quadratic(quadratic) => { self.add_quadratic(quadratic + -position); },
-                Cubic(cubic)         => { self.add_cubic(cubic + -position); },
-                _ => (),
-            }
-        }
-    }
+    pub fn fill_path<A: Alloc>(&mut self, path: &Path<A>, tfx: Transform) {
+        use IterEvent::*;
+        let mut begin = None;
 
-    pub fn fill_path_tfx<A: Alloc>(&mut self, path: &Path<A>, tfx: Transform) {
         for event in path.iter() {
-            use IterEvent::*;
             match event {
-                Segment(segment)     => { self.add_segment(tfx * segment); },
-                Quadratic(quadratic) => { self.add_quadratic(tfx * quadratic); },
-                Cubic(cubic)         => { self.add_cubic(tfx * cubic); },
-                _ => (),
+                Begin(p0, is_closed) => {
+                    if !is_closed {
+                        begin = Some(p0);
+                    }
+                }
+
+                Segment(segment)     => { self.add_segment(tfx * segment); }
+                Quadratic(quadratic) => { self.add_quadratic(tfx * quadratic); }
+                Cubic(cubic)         => { self.add_cubic(tfx * cubic); }
+
+                End (p1) => {
+                    if let Some(p0) = begin {
+                        self.add_segment(tfx * segment(p1, p0));
+                        begin = None;
+                    }
+                }
             }
         }
     }
