@@ -73,7 +73,7 @@ impl<'a> Stroker<'a> {
         Self {
             lines: Vec::new_in(allocator),
             quads: Vec::new_in(allocator),
-            aabb: rect(F32x2::splat(f32::MAX), F32x2::splat(f32::MIN)),
+            aabb: Rect::MAX_MIN,
 
             left:   0.0,
             right:  0.0,

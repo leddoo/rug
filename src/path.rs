@@ -10,6 +10,17 @@ use crate::geometry::*;
 ///  Path ::= SubPath*
 ///  SubPath ::= (BeginOpen | BeginClosed) Curve* End
 ///  Curve ::= Segment | Quadratic | Cubic
+/// 
+/// Number of points:
+///  Begin*:    1
+///  Segment:   1
+///  Quadratic: 2
+///  Cubic:     3
+///  End:       0
+/// 
+/// The first point of any curve is the last point of the previous verb.
+/// Closed paths must have *equal* start/end points.
+/// 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Verb {
@@ -26,11 +37,21 @@ pub struct Path<A: Alloc> {
     header: NonNull<PathHeader<A>>,
 }
 
-unsafe impl<A: Alloc> Send for Path<A> {}
+// safety:
+// Path itself is thread safe (immutable, arc).
+// the allocator may not be.
+// only path creation and dropping can access the allocator.
+// so sending is only safe when sending the allocator is safe,
+// but sending references is always safe.
+unsafe impl<A: Alloc> Send for Path<A> where A: Send {}
 unsafe impl<A: Alloc> Sync for Path<A> {}
 
+
 impl Path<GlobalAlloc> {
-    pub fn new(verbs: &[Verb], points: &[F32x2], aabb: Rect) -> Self {
+    /// safety:
+    /// - verbs/points must have the path syntax (see above).
+    /// - aabb must be valid (min <= max) and include all points.
+    pub unsafe fn new(verbs: &[Verb], points: &[F32x2], aabb: Rect) -> Self {
         Path::new_in(verbs, points, aabb, GlobalAlloc)
     }
 }
@@ -156,33 +177,57 @@ impl PathBuilder<GlobalAlloc> {
 impl<A: CopyAlloc> PathBuilder<A> {
     pub fn new_in(alloc: A) -> Self {
         PathBuilder {
-            verbs:  Vec::new_in(alloc),
-            points: Vec::new_in(alloc),
-            aabb:   rect(F32x2::splat(f32::MAX), F32x2::splat(f32::MIN)),
+            verbs:       Vec::new_in(alloc),
+            points:      Vec::new_in(alloc),
+            aabb:        Rect::MAX_MIN,
             in_path:     false,
             begin_point: F32x2::ZERO,
             begin_verb:  usize::MAX,
         }
     }
 
-
-    pub fn build(self) -> Path<A> {
-        let alloc = *self.verbs.allocator();
-        self.build_in(alloc)
+    pub fn in_path(&self) -> bool {
+        self.in_path
     }
 
-    pub fn build_in<B: Alloc>(mut self, alloc: B) -> Path<B> {
+    pub fn last_point(&self) -> F32x2 {
+        assert!(self.in_path);
+        *self.points.last().unwrap()
+    }
+
+    pub fn clear(&mut self) {
+        self.verbs.clear();
+        self.points.clear();
+        self.aabb        = Rect::MAX_MIN;
+        self.in_path     = false;
+        self.begin_point = F32x2::ZERO;
+        self.begin_verb  = usize::MAX;
+    }
+
+
+    pub fn build(&mut self) -> Path<GlobalAlloc> {
+        self.build_in(GlobalAlloc)
+    }
+
+    pub fn build_in<B: Alloc>(&mut self, alloc: B) -> Path<B> {
         if self.in_path {
-            self.verbs.push(Verb::End);
+            self._end_path();
         }
 
-        Path::new_in(&self.verbs, &self.points, self.aabb, alloc)
+        // ensure aabb is valid.
+        let aabb =
+            if self.verbs.len() > 0 { self.aabb }
+            else { Rect::ZERO };
+
+        // verbs/points are valid by construction.
+        unsafe { Path::new_in(&self.verbs, &self.points, aabb, alloc) }
     }
 
     pub fn move_to(&mut self, p0: F32x2) {
         if self.in_path {
-            self.verbs.push(Verb::End);
+            self._end_path();
         }
+
         self.verbs.push(Verb::BeginOpen);
         self.points.push(p0);
         self.aabb.include(p0);
@@ -220,10 +265,17 @@ impl<A: CopyAlloc> PathBuilder<A> {
 
     pub fn close(&mut self) {
         assert!(self.in_path);
+        // ensure start/end points are equal.
         if *self.points.last().unwrap() != self.begin_point {
             self.segment_to(self.begin_point);
         }
+
         self.verbs[self.begin_verb] = Verb::BeginClosed;
+        self._end_path();
+    }
+
+    #[inline(always)]
+    fn _end_path(&mut self) {
         self.verbs.push(Verb::End);
         self.in_path    = false;
         self.begin_verb = usize::MAX;
@@ -241,7 +293,7 @@ pub struct SoaPath<'a> {
 
 impl<'a> SoaPath<'a> {
     pub fn transform(&mut self, tfx: Transform) {
-        let mut aabb = rect(F32x2::splat(f32::MAX), F32x2::splat(f32::MIN));
+        let mut aabb = Rect::MAX_MIN;
 
         for line in self.lines.iter_mut() {
             *line = tfx * (*line);
@@ -276,7 +328,8 @@ impl<'a> SoaPath<'a> {
 ///     points: [F32x2; header.point_count]
 
 impl<A: Alloc> Path<A> {
-    pub fn new_in(verbs: &[Verb], points: &[F32x2], aabb: Rect, alloc: A) -> Self {
+    // see Path::new for safety information.
+    pub unsafe fn new_in(verbs: &[Verb], points: &[F32x2], aabb: Rect, alloc: A) -> Self {
         let verb_count  = verbs.len().try_into().unwrap();
         let point_count = points.len().try_into().unwrap();
 
@@ -285,26 +338,24 @@ impl<A: Alloc> Path<A> {
 
         // header
         let header = data.as_ptr() as *mut PathHeader<A>;
-        unsafe { header.write(PathHeader {
+        header.write(PathHeader {
             alloc,
             references: AtomicU32::new(1),
             verb_count, point_count, aabb,
-        }) };
+        });
 
         // verbs
-        let vs = unsafe {
+        let vs =
             core::slice::from_raw_parts_mut(
                 PathHeader::verbs_begin(header) as *mut Verb,
-                verb_count as usize)
-        };
+                verb_count as usize);
         vs.copy_from_slice(verbs);
 
         // points
-        let ps = unsafe {
+        let ps =
             core::slice::from_raw_parts_mut(
                 PathHeader::points_begin(header, verb_count as usize) as *mut F32x2,
-                point_count as usize)
-        };
+                point_count as usize);
         ps.copy_from_slice(points);
 
         Self { header: NonNull::new(header).unwrap() }

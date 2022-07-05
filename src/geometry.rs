@@ -9,11 +9,21 @@ pub struct Rect {
 }
 
 #[inline(always)]
-pub fn rect(min: F32x2, max: F32x2) -> Rect {
+pub const fn rect(min: F32x2, max: F32x2) -> Rect {
     Rect { min, max }
 }
 
 impl Rect {
+    pub const ZERO: Rect = rect(F32x2::ZERO, F32x2::ZERO);
+
+    /// invalid rect, useful for constructing aabbs with Rect::include.
+    pub const MAX_MIN: Rect = rect(F32x2::MAX, F32x2::MIN);
+
+    #[inline(always)]
+    pub fn valid(self) -> bool {
+        self.min.lanes_le(self.max).all()
+    }
+
     #[inline(always)]
     pub fn from_points(p0: F32x2, p1: F32x2) -> Rect {
         rect(p0.minf(p1), p0.maxf(p1))
