@@ -20,15 +20,16 @@ fn main() {
         let iters = 50;
         let t0 = std::time::Instant::now();
 
-        let mut target =
-            //RenderTarget::new(2560, 1440);
-            //RenderTarget::new(2048, 2048);
-            //RenderTarget::new(1920, 1080);
-            RenderTarget::new(1024, 1024);
-            //RenderTarget::new(512, 512);
+        let mut target: Image<u32> = unsafe {
+            //Image::new_uninit(2560, 1440)
+            //Image::new_uninit(2048, 2048)
+            //Image::new_uninit(1920, 1080)
+            Image::new_uninit(1024, 1024)
+            //Image::new_uninit(512, 512)
+        };
 
         for _ in 0..iters {
-            svg.execute(&mut target, tfx);
+            render(&mut target.view_mut(), &svg, tfx);
             //break;
         }
 
@@ -112,25 +113,25 @@ fn program() {
 
             let (w, h) = size;
             let tfx = Transform::translate(offset) * Transform::scale(scale);
-            let mut target = RenderTarget::new(w, h);
+            let mut target = unsafe { Image::new_uninit(w, h) };
 
             let t0 = std::time::Instant::now();
-            svg.execute(&mut target, tfx);
+            render(&mut target.view_mut(), &svg, tfx);
             println!("{:?}", t0.elapsed());
 
-            window.fill_pixels(&target.data, 0, 0, w, h);
+            window.fill_pixels(target.data(), 0, 0, w, h);
         }
     }
 }
 
 
-fn parse_xml(xml: &str) -> CommandBuffer<alloc::GlobalAlloc> {
+fn parse_xml(xml: &str) -> Vec<Command<alloc::GlobalAlloc>> {
     let xml = roxmltree::Document::parse(xml).unwrap();
 
     let root = xml.root();
     let svg = root.children().next().unwrap();
 
-    let mut result = CommandBuffer::new();
+    let mut result = vec![];
 
     for child in svg.children() {
         render(&mut result, child);
@@ -138,7 +139,7 @@ fn parse_xml(xml: &str) -> CommandBuffer<alloc::GlobalAlloc> {
 
     return result;
 
-    fn render(result: &mut CommandBuffer<GlobalAlloc>, node: roxmltree::Node) -> Option<()> {
+    fn render(result: &mut Vec<Command<GlobalAlloc>>, node: roxmltree::Node) -> Option<()> {
         if !node.is_element() {
             return None;
         }
@@ -216,7 +217,7 @@ fn parse_xml(xml: &str) -> CommandBuffer<alloc::GlobalAlloc> {
                         let a = ((alpha * (color.alpha as f32 / 255.0)) * 255.0) as u8;
                         let color = argb_pack_u8s(color.red, color.green, color.blue, a);
 
-                        result.add(Command::FillPathSolid {
+                        result.push(Command::FillPathSolid {
                             path: path.clone(),
                             color,
                             rule: FillRule::NonZero,
@@ -249,7 +250,7 @@ fn parse_xml(xml: &str) -> CommandBuffer<alloc::GlobalAlloc> {
                         let a = ((alpha * (color.alpha as f32 / 255.0)) * 255.0) as u8;
                         let color = argb_pack_u8s(color.red, color.green, color.blue, a);
 
-                        result.add(Command::StrokePathSolid {
+                        result.push(Command::StrokePathSolid {
                             path: path.clone(),
                             color,
                             width,
@@ -269,6 +270,53 @@ fn parse_xml(xml: &str) -> CommandBuffer<alloc::GlobalAlloc> {
         }
 
         Some(())
+    }
+}
+
+
+#[inline(never)]
+fn render<A: Alloc>(target: &mut ImgMut<u32>, commands: &[Command<A>], tfx: Transform) {
+    let tile_size = 160;
+
+    let (mut tiles, tile_counts) = target.tiles(tile_size);
+
+    let strokes: Vec<_> = commands.iter().map(|cmd| {
+        match cmd {
+            Command::StrokePathSolid { path, color: _, width, cap: _, join: _ } => {
+                Some(stroke_path(path, *width))
+            },
+
+            _ => None,
+        }
+    }).collect();
+
+    let mut masks = Vec::new();
+    masks.resize_with(tiles.len(), || CommandMask::new(commands.len()));
+    fill_masks(&masks, commands, 0, tile_size, tile_counts, tfx, &strokes);
+
+    let mut buffer: Image<[F32x8; 4]> = unsafe { Image::new_uninit(tile_size / 8, tile_size) };
+    let mut buffer = buffer.view_mut();
+
+    for i in 0..tiles.len() {
+        let tile = &mut tiles[i];
+        let mask = &mut masks[i];
+
+        let clear = [
+            F32x8::splat(15.0/255.0),
+            F32x8::splat(20.0/255.0),
+            F32x8::splat(25.0/255.0),
+            F32x8::splat(1.0) ];
+        buffer.clear(clear);
+
+        let size = tile.img.size();
+        let size = U32x2::new((size.x() + 7) / 8, size.y());
+        let mut target = Tile::new(buffer.sub_view(U32x2::ZERO, size), tile.rect);
+        mask.iter(|cmd| {
+            target.execute(&commands[cmd], tfx, &strokes[cmd]);
+        });
+
+        tile.img.copy_expand(&target.img.view(), I32x2::ZERO,
+            |c| *argb_u8x_pack(c).as_array());
     }
 }
 

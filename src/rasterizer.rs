@@ -503,13 +503,7 @@ impl<'a> Rasterizer<'a> {
         }
     }
 
-    pub fn fill_soa_path(&mut self, path: &SoaPath, position: F32x2) {
-        for line  in path.lines.iter()  { self.add_segment(*line + -position); }
-        for quad  in path.quads.iter()  { self.add_quadratic(*quad + -position); }
-        for cubic in path.cubics.iter() { self.add_cubic(*cubic + -position); }
-    }
-
-    pub fn fill_soa_path_tfx(&mut self, path: &SoaPath, tfx: Transform) {
+    pub fn fill_soa_path(&mut self, path: &SoaPath, tfx: Transform) {
         for line  in path.lines.iter()  { self.add_segment(tfx * *line); }
         for quad  in path.quads.iter()  { self.add_quadratic(tfx * *quad); }
         for cubic in path.cubics.iter() { self.add_cubic(tfx * *cubic); }

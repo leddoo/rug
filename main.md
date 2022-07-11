@@ -1,4 +1,35 @@
 todo:
+- use Image in rasterizer
+- remove alpha image.
+
+- compositor (dx11 backend).
+
+- aot strokes in main
+- rayon mt in main.
+
+- boundary fragment rasterizer:
+    - use trait for shared impl.
+    - use 4x dda.
+    - and have fn in trait for 4x boundary fragments + masks.
+
+- renderer state: transform, tolerances, etc.
+
+- high level api:
+    - (range, sync closure)?
+    - well, how do we get mut refs into vecs?
+    - maybe just have a rayon feature. i don't really care about not using rayon anymore.
+
+
+
+- try fixing `Path<A>` nonsense.
+    - i guess let's just not make `Path: Send`.
+    - could have a `SendPath`, which wraps a `Path`, just for sending it.
+    - could think about the bool approach.
+        - but that's pretty messy tbh.
+        - idk, maybe it's fine.
+        - `type Path<'a> = BasePath<'a, false>` ~ default is not Send.
+- stroke -> Path
+
 - command buffer.
     - consider stages (for manually chaining command buffers).
     - "config":
@@ -7,8 +38,6 @@ todo:
         - tile size (optional tiling?).
         - allocator.
     - thread pool interface.
-- stroker trait.
-- ad-hoc stroking.
 - clean up:
     - color module.
     - use logfiler: bring back drawing metrics & other diagnostics.

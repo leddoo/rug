@@ -1,9 +1,224 @@
+use core::marker::PhantomData;
+
 use sti::simd::*;
 use crate::alloc::*;
+use crate::geometry::rect;
+use crate::renderer::Tile;
+
+
+
+pub struct Image<T: Copy, A: Alloc = GlobalAlloc> {
+    data: Box<[T], A>,
+    size: U32x2,
+}
+
+impl<T: Copy> Image<T, GlobalAlloc> {
+    pub unsafe fn new_uninit(w: u32, h: u32) -> Self {
+        Image::new_uninit_in(w, h, GlobalAlloc)
+    }
+
+    pub fn new(w: u32, h: u32, clear: T) -> Self {
+        Image::new_in(w, h, clear, GlobalAlloc)
+    }
+}
+
+impl<T: Copy, A: Alloc> Image<T, A> {
+    pub fn data(&self) -> &[T] { &self.data }
+
+    pub fn data_mut(&mut self) -> &mut [T] { &mut self.data }
+
+    pub fn size(&self) -> U32x2 { self.size }
+
+    pub fn stride(&self) -> usize { self.size.x() as usize }
+
+
+    pub unsafe fn new_uninit_in(w: u32, h: u32, alloc: A) -> Self {
+        let len = (w * h) as usize;
+
+        let mut data = Vec::with_capacity_in(len, alloc);
+        data.set_len(len);
+
+        Self { data: data.into_boxed_slice(), size: U32x2::new(w, h) }
+    }
+
+    pub fn new_in(w: u32, h: u32, clear: T, alloc: A) -> Self {
+        let mut result = unsafe { Self::new_uninit_in(w, h, alloc) };
+        result.clear(clear);
+        result
+    }
+
+    pub fn clear(&mut self, color: T) {
+        for v in self.data.iter_mut() {
+            *v = color;
+        }
+    }
+
+
+    unsafe fn _view<const MUT: bool>(&self) -> BaseImg<MUT, T> {
+        BaseImg {
+            data: (self.data.as_ptr(), self.data.len(), PhantomData),
+            size: self.size,
+            stride: self.stride(),
+        }
+    }
+
+    pub fn view(&self) -> Img<T> { unsafe { self._view() } }
+
+    pub fn view_mut(&mut self) -> ImgMut<T> { unsafe { self._view() } }
+}
+
+
+pub struct BaseImg<'img, const MUT: bool, T: Copy> {
+    data:   (*const T, usize, PhantomData<&'img ()>),
+    size:   U32x2,
+    stride: usize,
+}
+
+pub type Img<'img, T> = BaseImg<'img, false, T>;
+pub type ImgMut<'img, T> = BaseImg<'img, true, T>;
+
+
+impl<'img, const MUT: bool, T: Copy> BaseImg<'img, MUT, T> {
+    pub fn data(&self) -> &[T] {
+        unsafe { core::slice::from_raw_parts(self.data.0, self.data.1) }
+    }
+
+    pub fn size(&self) -> U32x2 { self.size }
+
+    pub fn stride(&self) -> usize { self.stride }
+}
+
+impl<'img, T: Copy> ImgMut<'img, T> {
+    pub fn data_mut(&mut self) -> &mut [T] {
+        unsafe { core::slice::from_raw_parts_mut(self.data.0 as *mut _, self.data.1) }
+    }
+
+    pub fn view(&self) -> Img<T> {
+        Img { data: self.data, size: self.size, stride: self.stride }
+    }
+
+
+    pub fn clear(&mut self, color: T) {
+        for v in self.data_mut().iter_mut() {
+            *v = color;
+        }
+    }
+
+    pub fn copy_expand<U: Copy, const N: usize, F: Fn(U) -> [T; N]>
+        (&mut self, src: &Img<U>, to: I32x2, f: F)
+    {
+        let size = src.size.as_i32()*I32x2::new(N as i32, 1);
+
+        let begin = to         .clamp(I32x2::ZERO, self.size.as_i32()).cast::<usize>();
+        let end   = (to + size).clamp(I32x2::ZERO, self.size.as_i32()).cast::<usize>();
+
+        let [w, h] = *(end - begin).as_array();
+
+        let stride = self.stride;
+        let data = self.data_mut();
+        let start = begin.y()*stride + begin.x();
+
+        for dy in 0..h {
+            let base = start + dy*stride;
+
+            for u in 0 .. (w / N) {
+                let c = f(src[(u, dy)]);
+                let i0 = base + u*N;
+                data[i0 .. i0 + N].copy_from_slice(&c);
+            }
+
+            let rem = w % N;
+            if rem > 0 {
+                let u = w / N;
+                let c = f(src[(u, dy)]);
+                let i0 = base + u*N;
+                data[i0 .. i0 + rem].copy_from_slice(&c[0..rem]);
+            }
+        }
+    }
+
+
+    pub fn sub_view(&mut self, begin: U32x2, end: U32x2) -> ImgMut<T> {
+        assert!(begin.lanes_le(end).all());
+        assert!(end.lanes_le(self.size).all());
+        let size = end - begin;
+
+        let index = (begin.y() as usize)*self.stride + begin.x() as usize;
+
+        let mut len = 0;
+        if size.y() > 0 {
+            len += size.x() as usize;
+            len += (size.y() as usize - 1)*self.stride;
+        }
+        assert!(index + len <= self.data.1);
+
+        let ptr = unsafe { self.data.0.add(index) }; 
+        ImgMut {
+            data: (ptr, len, PhantomData),
+            size,
+            stride: self.stride,
+        }
+    }
+
+    pub fn sub_tile(&mut self, begin: U32x2, end: U32x2) -> Tile<T> {
+        Tile {
+            img: self.sub_view(begin, end),
+            rect: rect(begin.as_i32().to_f32(), end.as_i32().to_f32()),
+        }
+    }
+
+    pub fn tiles(&mut self, tile_size: u32) -> (Vec<Tile<T>>, U32x2) {
+        let tile_size = U32x2::splat(tile_size);
+        let tile_counts = (self.size + tile_size - U32x2::ONE) / tile_size;
+        let tile_count = (tile_counts.x() * tile_counts.y()) as usize;
+
+        let mut tiles = Vec::with_capacity(tile_count);
+        for y in 0..tile_counts.y() {
+            for x in 0..tile_counts.x() {
+                let begin = U32x2::new(x, y) * tile_size;
+                let end   = (begin + tile_size).min(self.size);
+
+                let tile = self.sub_tile(begin, end);
+                // cast lifetime to outer borrow.
+                // tiles are disjoint by construction.
+                let tile = unsafe { core::mem::transmute(tile) };
+                tiles.push(tile);
+            }
+        }
+
+        (tiles, tile_counts)
+    }
+}
+
+
+impl<'img, const MUT: bool, T: Copy> core::ops::Index<(usize, usize)> for BaseImg<'img, MUT, T> {
+    type Output = T;
+
+    #[inline(always)]
+    fn index(&self, index: (usize, usize)) -> &Self::Output {
+        let (x, y) = index;
+        assert!(x < self.size.x() as usize);
+        let stride = self.stride;
+        // y bounds check is here.
+        &self.data()[y*stride + x]
+    }
+}
+
+impl<'img, T: Copy> core::ops::IndexMut<(usize, usize)> for BaseImg<'img, true, T> {
+    #[inline(always)]
+    fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
+        let (x, y) = index;
+        assert!(x < self.size.x() as usize);
+        let stride = self.stride;
+        // y bounds check is here.
+        &mut self.data_mut()[y*stride + x]
+    }
+}
+
+
 
 
 pub type Mask<'a>   = Image_a_f32<'a>;
-pub type Target<'a> = Image_rgba_f32x<'a, 8>;
 
 
 
@@ -116,64 +331,6 @@ impl<'a> core::ops::IndexMut<(usize, usize)> for Image_a_f32<'a> {
     }
 }
 
-
-
-
-#[allow(non_camel_case_types)]
-pub struct Image_rgba_f32x<'a, const N: usize> where LaneCount<N>: SupportedLaneCount {
-    pub(crate) data: Box<[[F32x<N>; 4]], &'a dyn Alloc>,
-    bounds: U32x2,
-    stride: usize,
-}
-
-impl<'a, const N: usize> Image_rgba_f32x<'a, N> where LaneCount<N>: SupportedLaneCount {
-    pub const fn simd_width() -> usize { N }
-
-    pub fn new(width: u32, height: u32) -> Image_rgba_f32x<'a, N> {
-        Image_rgba_f32x::new_in(width, height, &GlobalAlloc)
-    }
-
-    pub fn new_in(width: u32, height: u32, allocator: &'a dyn Alloc) -> Image_rgba_f32x<'a, N> {
-        let stride = (width as usize + N-1) / N;
-        Image_rgba_f32x {
-            data:   new_slice_box(stride * height as usize, allocator),
-            bounds: [width, height].into(),
-            stride,
-        }
-    }
-
-    image_impl_bounds!();
-
-    pub fn clear(&mut self, color: F32x4) {
-        let r = <F32x<N>>::splat(color[0]);
-        let g = <F32x<N>>::splat(color[1]);
-        let b = <F32x<N>>::splat(color[2]);
-        let a = <F32x<N>>::splat(color[3]);
-
-        let value = [r, g, b, a];
-        for v in self.data.iter_mut() {
-            *v = value;
-        }
-    }
-}
-
-impl<'a, const N: usize> core::ops::Index<(usize, usize)> for Image_rgba_f32x<'a, N> where LaneCount<N>: SupportedLaneCount {
-    type Output = [F32x<N>; 4];
-
-    #[inline(always)]
-    fn index(&self, index: (usize, usize)) -> &Self::Output {
-        let (x, y) = index;
-        &self.data[y*self.stride() + x]
-    }
-}
-
-impl<'a, const N: usize> core::ops::IndexMut<(usize, usize)> for Image_rgba_f32x<'a, N> where LaneCount<N>: SupportedLaneCount {
-    #[inline(always)]
-    fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
-        let (x, y) = index;
-        &mut self.data[y*self.stride() + x]
-    }
-}
 
 
 
