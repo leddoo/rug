@@ -23,13 +23,30 @@ impl<T: Copy> Image<T, GlobalAlloc> {
 }
 
 impl<T: Copy, A: Alloc> Image<T, A> {
-    pub fn data(&self) -> &[T] { &self.data }
+    #[inline(always)]
+    pub fn data(&self) -> &[T] {
+        &self.data
+    }
 
-    pub fn data_mut(&mut self) -> &mut [T] { &mut self.data }
+    #[inline(always)]
+    pub fn data_mut(&mut self) -> &mut [T] {
+        &mut self.data
+    }
 
-    pub fn size(&self) -> U32x2 { self.size }
+    #[inline(always)]
+    pub fn size(&self) -> U32x2 {
+        self.size
+    }
 
-    pub fn stride(&self) -> usize { self.size.x() as usize }
+    #[inline(always)]
+    pub fn stride(&self) -> usize {
+        self.size.x() as usize
+    }
+
+    #[inline(always)]
+    pub fn stride_bytes(&self) -> usize {
+        self.stride() * core::mem::size_of::<T>()
+    }
 
 
     pub unsafe fn new_uninit_in(w: u32, h: u32, alloc: A) -> Self {
@@ -62,9 +79,15 @@ impl<T: Copy, A: Alloc> Image<T, A> {
         }
     }
 
-    pub fn view(&self) -> Img<T> { unsafe { self._view() } }
+    #[inline(always)]
+    pub fn view(&self) -> Img<T> {
+        unsafe { self._view() }
+    }
 
-    pub fn view_mut(&mut self) -> ImgMut<T> { unsafe { self._view() } }
+    #[inline(always)]
+    pub fn view_mut(&mut self) -> ImgMut<T> {
+        unsafe { self._view() }
+    }
 }
 
 
@@ -79,20 +102,34 @@ pub type ImgMut<'img, T> = BaseImg<'img, true, T>;
 
 
 impl<'img, const MUT: bool, T: Copy> BaseImg<'img, MUT, T> {
+    #[inline(always)]
     pub fn data(&self) -> &[T] {
         unsafe { core::slice::from_raw_parts(self.data.0, self.data.1) }
     }
 
-    pub fn size(&self) -> U32x2 { self.size }
+    #[inline(always)]
+    pub fn size(&self) -> U32x2 {
+        self.size
+    }
 
-    pub fn stride(&self) -> usize { self.stride }
+    #[inline(always)]
+    pub fn stride(&self) -> usize {
+        self.stride
+    }
+
+    #[inline(always)]
+    pub fn stride_bytes(&self) -> usize {
+        self.stride() * core::mem::size_of::<T>()
+    }
 }
 
 impl<'img, T: Copy> ImgMut<'img, T> {
+    #[inline(always)]
     pub fn data_mut(&mut self) -> &mut [T] {
         unsafe { core::slice::from_raw_parts_mut(self.data.0 as *mut _, self.data.1) }
     }
 
+    #[inline(always)]
     pub fn view(&self) -> Img<T> {
         Img { data: self.data, size: self.size, stride: self.stride }
     }
@@ -160,6 +197,7 @@ impl<'img, T: Copy> ImgMut<'img, T> {
         }
     }
 
+    #[inline(always)]
     pub fn sub_tile(&mut self, begin: U32x2, end: U32x2) -> Tile<T> {
         Tile {
             img: self.sub_view(begin, end),
