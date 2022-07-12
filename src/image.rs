@@ -6,9 +6,104 @@ use crate::geometry::rect;
 use crate::renderer::Tile;
 
 
+macro_rules! _impl {
+    () => {
+        #[inline(always)]
+        pub fn size(&self) -> U32x2 {
+            self.size
+        }
+
+        #[inline(always)]
+        pub fn width(&self) -> u32 {
+            self.size.x()
+        }
+
+        #[inline(always)]
+        pub fn height(&self) -> u32 {
+            self.size.y()
+        }
+
+        #[inline(always)]
+        pub fn stride(&self) -> usize {
+            self.stride
+        }
+
+        #[inline(always)]
+        pub fn stride_bytes(&self) -> usize {
+            self.stride() * core::mem::size_of::<T>()
+        }
+
+        pub fn truncate(&mut self, new_size: U32x2) {
+            assert!(new_size.lanes_le(self.size).all());
+            self.len  = (new_size.x() * new_size.y()) as usize;
+            self.size = new_size;
+        }
+
+        #[inline(always)]
+        pub fn read_n<const N: usize>(&self, x: usize, y: usize) -> [T; N] {
+            assert!(x + N <= self.width() as usize && y < self.height() as usize);
+            unsafe {
+                (self.data().as_ptr().add(y*self.stride + x)
+                    as *const [T; N]).read_unaligned()
+            }
+        }
+    };
+}
+
+macro_rules! _impl_mut {
+    () => {
+        pub fn clear(&mut self, color: T) {
+            for v in self.data_mut().iter_mut() {
+                *v = color;
+            }
+        }
+
+        #[inline(always)]
+        pub fn write_n<const N: usize>(&mut self, x: usize, y: usize, vs: [T; N]) {
+            assert!(x + N <= self.width() as usize && y < self.height() as usize);
+            unsafe {
+                (self.data_mut().as_mut_ptr().add(y*self.stride + x)
+                    as *mut [T; N]).write_unaligned(vs);
+            }
+        }
+    };
+}
+
+macro_rules! _index {
+    () => {
+        type Output = T;
+
+        #[inline(always)]
+        fn index(&self, index: (usize, usize)) -> &Self::Output {
+            let (x, y) = index;
+            assert!(x < self.width() as usize);
+
+            let stride = self.stride();
+            // y bounds check is here.
+            &self.data()[y*stride + x]
+        }
+    };
+}
+
+macro_rules! _index_mut {
+    () => {
+        #[inline(always)]
+        fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
+            let (x, y) = index;
+            assert!(x < self.width() as usize);
+
+            let stride = self.stride();
+            // y bounds check is here.
+            &mut self.data_mut()[y*stride + x]
+        }
+    };
+}
+
 
 pub struct Image<T: Copy, A: Alloc = GlobalAlloc> {
     data: Box<[T], A>,
+    len:    usize,
+    stride: usize,
     size: U32x2,
 }
 
@@ -23,39 +118,17 @@ impl<T: Copy> Image<T, GlobalAlloc> {
 }
 
 impl<T: Copy, A: Alloc> Image<T, A> {
-    #[inline(always)]
-    pub fn data(&self) -> &[T] {
-        &self.data
-    }
-
-    #[inline(always)]
-    pub fn data_mut(&mut self) -> &mut [T] {
-        &mut self.data
-    }
-
-    #[inline(always)]
-    pub fn size(&self) -> U32x2 {
-        self.size
-    }
-
-    #[inline(always)]
-    pub fn stride(&self) -> usize {
-        self.size.x() as usize
-    }
-
-    #[inline(always)]
-    pub fn stride_bytes(&self) -> usize {
-        self.stride() * core::mem::size_of::<T>()
-    }
-
-
     pub unsafe fn new_uninit_in(w: u32, h: u32, alloc: A) -> Self {
         let len = (w * h) as usize;
 
         let mut data = Vec::with_capacity_in(len, alloc);
         data.set_len(len);
-
-        Self { data: data.into_boxed_slice(), size: U32x2::new(w, h) }
+        Self {
+            data: data.into_boxed_slice(),
+            len,
+            stride: w as usize,
+            size: U32x2::new(w, h)
+        }
     }
 
     pub fn new_in(w: u32, h: u32, clear: T, alloc: A) -> Self {
@@ -64,17 +137,25 @@ impl<T: Copy, A: Alloc> Image<T, A> {
         result
     }
 
-    pub fn clear(&mut self, color: T) {
-        for v in self.data.iter_mut() {
-            *v = color;
-        }
+    #[inline(always)]
+    pub fn data(&self) -> &[T] {
+        unsafe { core::slice::from_raw_parts(self.data.as_ptr(), self.len) }
     }
+
+    #[inline(always)]
+    pub fn data_mut(&mut self) -> &mut [T] {
+        unsafe { core::slice::from_raw_parts_mut(self.data.as_mut_ptr(), self.len) }
+    }
+
+    _impl!();
+    _impl_mut!();
 
 
     unsafe fn _view<const MUT: bool>(&self) -> BaseImg<MUT, T> {
         BaseImg {
-            data: (self.data.as_ptr(), self.data.len(), PhantomData),
-            size: self.size,
+            data:   (self.data.as_ptr(), PhantomData),
+            len:    self.len,
+            size:   self.size,
             stride: self.stride(),
         }
     }
@@ -90,9 +171,18 @@ impl<T: Copy, A: Alloc> Image<T, A> {
     }
 }
 
+impl<T: Copy, A: Alloc> core::ops::Index<(usize, usize)> for Image<T, A> {
+    _index!();
+}
+
+impl<T: Copy, A: Alloc> core::ops::IndexMut<(usize, usize)> for Image<T, A> {
+    _index_mut!();
+}
+
 
 pub struct BaseImg<'img, const MUT: bool, T: Copy> {
-    data:   (*const T, usize, PhantomData<&'img ()>),
+    data:   (*const T, PhantomData<&'img ()>),
+    len:    usize,
     size:   U32x2,
     stride: usize,
 }
@@ -104,41 +194,23 @@ pub type ImgMut<'img, T> = BaseImg<'img, true, T>;
 impl<'img, const MUT: bool, T: Copy> BaseImg<'img, MUT, T> {
     #[inline(always)]
     pub fn data(&self) -> &[T] {
-        unsafe { core::slice::from_raw_parts(self.data.0, self.data.1) }
+        unsafe { core::slice::from_raw_parts(self.data.0, self.len) }
     }
 
-    #[inline(always)]
-    pub fn size(&self) -> U32x2 {
-        self.size
-    }
-
-    #[inline(always)]
-    pub fn stride(&self) -> usize {
-        self.stride
-    }
-
-    #[inline(always)]
-    pub fn stride_bytes(&self) -> usize {
-        self.stride() * core::mem::size_of::<T>()
-    }
+    _impl!();
 }
 
 impl<'img, T: Copy> ImgMut<'img, T> {
     #[inline(always)]
     pub fn data_mut(&mut self) -> &mut [T] {
-        unsafe { core::slice::from_raw_parts_mut(self.data.0 as *mut _, self.data.1) }
+        unsafe { core::slice::from_raw_parts_mut(self.data.0 as *mut _, self.len) }
     }
+
+    _impl_mut!();
 
     #[inline(always)]
     pub fn view(&self) -> Img<T> {
-        Img { data: self.data, size: self.size, stride: self.stride }
-    }
-
-
-    pub fn clear(&mut self, color: T) {
-        for v in self.data_mut().iter_mut() {
-            *v = color;
-        }
+        Img { data: self.data, len: self.len, size: self.size, stride: self.stride }
     }
 
     pub fn copy_expand<U: Copy, const N: usize, F: Fn(U) -> [T; N]>
@@ -174,7 +246,6 @@ impl<'img, T: Copy> ImgMut<'img, T> {
         }
     }
 
-
     pub fn sub_view(&mut self, begin: U32x2, end: U32x2) -> ImgMut<T> {
         assert!(begin.lanes_le(end).all());
         assert!(end.lanes_le(self.size).all());
@@ -187,11 +258,12 @@ impl<'img, T: Copy> ImgMut<'img, T> {
             len += size.x() as usize;
             len += (size.y() as usize - 1)*self.stride;
         }
-        assert!(index + len <= self.data.1);
+        assert!(index + len <= self.len);
 
-        let ptr = unsafe { self.data.0.add(index) }; 
+        let ptr = unsafe { self.data.0.add(index) };
         ImgMut {
-            data: (ptr, len, PhantomData),
+            data: (ptr, PhantomData),
+            len,
             size,
             stride: self.stride,
         }
@@ -230,143 +302,11 @@ impl<'img, T: Copy> ImgMut<'img, T> {
 
 
 impl<'img, const MUT: bool, T: Copy> core::ops::Index<(usize, usize)> for BaseImg<'img, MUT, T> {
-    type Output = T;
-
-    #[inline(always)]
-    fn index(&self, index: (usize, usize)) -> &Self::Output {
-        let (x, y) = index;
-        assert!(x < self.size.x() as usize);
-        let stride = self.stride;
-        // y bounds check is here.
-        &self.data()[y*stride + x]
-    }
+    _index!();
 }
 
 impl<'img, T: Copy> core::ops::IndexMut<(usize, usize)> for BaseImg<'img, true, T> {
-    #[inline(always)]
-    fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
-        let (x, y) = index;
-        assert!(x < self.size.x() as usize);
-        let stride = self.stride;
-        // y bounds check is here.
-        &mut self.data_mut()[y*stride + x]
-    }
-}
-
-
-
-
-pub type Mask<'a>   = Image_a_f32<'a>;
-
-
-
-fn new_slice_box<T: Default + Copy>(length: usize, allocator: &dyn Alloc) -> Box<[T], &dyn Alloc> {
-    let mut data = Vec::new_in(allocator);
-    data.resize(length, Default::default());
-    data.into_boxed_slice()
-}
-
-
-macro_rules! image_impl_bounds {
-    () => {
-        #[inline(always)]
-        pub fn bounds(&self) -> U32x2 { self.bounds }
-
-        #[inline(always)]
-        pub fn width(&self) -> u32 { self.bounds[0] }
-
-        #[inline(always)]
-        pub fn height(&self) -> u32 { self.bounds[1] }
-
-        #[inline(always)]
-        pub fn stride(&self) -> usize { self.stride }
-
-
-        pub fn truncate_width(&mut self, new_width: u32) {
-            assert!(new_width <= self.width());
-            self.bounds[0] = new_width;
-        }
-
-        pub fn truncate_height(&mut self, new_height: u32) {
-            assert!(new_height <= self.height());
-            self.bounds[1] = new_height;
-        }
-
-        pub fn truncate(&mut self, new_width: u32, new_height: u32) {
-            self.truncate_width(new_width);
-            self.truncate_height(new_height);
-        }
-    };
-}
-
-
-#[allow(non_camel_case_types)]
-pub struct Image_a_f32<'a> {
-    pub(crate) data: Box<[f32], &'a dyn Alloc>,
-    bounds: U32x2,
-    stride: usize,
-}
-
-impl<'a> Image_a_f32<'a> {
-    pub fn new(width: u32, height: u32) -> Image_a_f32<'a> {
-        Image_a_f32::new_in(width, height, &GlobalAlloc)
-    }
-
-    pub fn new_in(width: u32, height: u32, allocator: &'a dyn Alloc) -> Image_a_f32<'a> {
-        Image_a_f32 {
-            data:   new_slice_box((width*height) as usize, allocator),
-            bounds: [width, height].into(),
-            stride: width as usize,
-        }
-    }
-
-    image_impl_bounds!();
-
-
-    #[inline(always)]
-    pub fn read<const N: usize>(&self, x: usize, y: usize) -> F32x<N> where LaneCount<N>: SupportedLaneCount {
-        assert!(x + N <= self.width() as usize && y < self.height() as usize);
-        unsafe {
-            let ptr = self.data.as_ptr().add(y*self.stride + x);
-            let ptr = ptr as *const F32x<N>;
-            ptr.read_unaligned()
-        }
-    }
-
-    #[inline(always)]
-    pub fn write<const N: usize>(&self, x: usize, y: usize, value: F32x<N>) where LaneCount<N>: SupportedLaneCount {
-        assert!(x + N <= self.width() as usize && y < self.height() as usize);
-        unsafe {
-            let ptr = self.data.as_ptr().add(y*self.stride + x);
-            let ptr = ptr as *mut F32x<N>;
-            ptr.write_unaligned(value)
-        }
-    }
-
-
-    pub fn clear(&mut self, value: f32) {
-        for v in self.data.iter_mut() {
-            *v = value;
-        }
-    }
-}
-
-impl<'a> core::ops::Index<(usize, usize)> for Image_a_f32<'a> {
-    type Output = f32;
-
-    #[inline(always)]
-    fn index(&self, index: (usize, usize)) -> &Self::Output {
-        let (x, y) = index;
-        &self.data[y*self.stride() + x]
-    }
-}
-
-impl<'a> core::ops::IndexMut<(usize, usize)> for Image_a_f32<'a> {
-    #[inline(always)]
-    fn index_mut(&mut self, index: (usize, usize)) -> &mut Self::Output {
-        let (x, y) = index;
-        &mut self.data[y*self.stride() + x]
-    }
+    _index_mut!();
 }
 
 
@@ -393,13 +333,13 @@ pub fn argb_pack_u8s(r: u8, g: u8, b: u8, a: u8) -> u32 {
 
 #[inline(always)]
 pub fn argb_u8x_unpack<const N: usize>(v: U32x<N>) -> [F32x<N>; 4] where LaneCount<N>: SupportedLaneCount {
-    let mask = <U32x<N>>::splat(0xff);
+    let mask = U32x::splat(0xff);
     let b = v & mask;
-    let g = (v >> <U32x<N>>::splat(8))  & mask;
-    let r = (v >> <U32x<N>>::splat(16)) & mask;
-    let a = (v >> <U32x<N>>::splat(24)) & mask;
+    let g = (v >> U32x::splat(8))  & mask;
+    let r = (v >> U32x::splat(16)) & mask;
+    let a = (v >> U32x::splat(24)) & mask;
 
-    let scale = <F32x<N>>::splat(255.0);
+    let scale = F32x::splat(255.0);
     [r.as_i32().to_f32() / scale,
      g.as_i32().to_f32() / scale,
      b.as_i32().to_f32() / scale,
@@ -411,18 +351,18 @@ pub unsafe fn argb_u8x_pack_clamped_255<const N: usize>(v: [F32x<N>; 4]) -> U32x
     let [r, g, b, a] = v;
 
     let b = b.to_i32_unck();
-    let g = g.to_i32_unck() << <I32x<N>>::splat(8);
-    let r = r.to_i32_unck() << <I32x<N>>::splat(16);
-    let a = a.to_i32_unck() << <I32x<N>>::splat(24);
+    let g = g.to_i32_unck() << I32x::splat(8);
+    let r = r.to_i32_unck() << I32x::splat(16);
+    let a = a.to_i32_unck() << I32x::splat(24);
     (a | r | g | b).as_u32()
 }
 
 #[inline(always)]
 pub fn argb_u8x_pack<const N: usize>(v: [F32x<N>; 4]) -> U32x<N> where LaneCount<N>: SupportedLaneCount {
-    let offset = <F32x<N>>::splat(0.5);
-    let scale = <F32x<N>>::splat(255.0);
-    let min = <F32x<N>>::splat(0.0);
-    let max = <F32x<N>>::splat(255.0);
+    let offset = F32x::splat(0.5);
+    let scale = F32x::splat(255.0);
+    let min = F32x::splat(0.0);
+    let max = F32x::splat(255.0);
     let [r, g, b, a] = v;
     unsafe { argb_u8x_pack_clamped_255([
         (scale*r + offset).clamp(min, max),

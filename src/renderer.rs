@@ -41,7 +41,7 @@ impl<A: Alloc> Command<A> {
     }
 
     #[inline(always)]
-    pub fn rasterize(&self, tfx: Transform, r: &mut Rasterizer, stroke: &Option<SoaPath>) {
+    pub fn rasterize<B: Alloc>(&self, tfx: Transform, r: &mut Rasterizer<B>, stroke: &Option<SoaPath>) {
         match self {
             Command::FillPathSolid { path, color: _, rule: _ } => {
                 r.fill_path(path, tfx);
@@ -108,8 +108,7 @@ pub struct Tile<'img, T: Copy> {
     pub rect: Rect,
 }
 
-impl<'img, const N: usize> Tile<'img, [F32x<N>; 4]> where LaneCount<N>: SupportedLaneCount
-{
+impl<'img, const N: usize> Tile<'img, [F32x<N>; 4]> where LaneCount<N>: SupportedLaneCount {
     #[inline(always)]
     pub fn new(img: ImgMut<'img, [F32x<N>; 4]>, rect: Rect) -> Self {
         Self { img, rect }
@@ -124,7 +123,7 @@ impl<'img, const N: usize> Tile<'img, [F32x<N>; 4]> where LaneCount<N>: Supporte
         stroke: &Option<SoaPath>,
     ) {
         let (raster_size, raster_origin, blit_offset) =
-            Rasterizer::rect_for(
+            <Rasterizer<GlobalAlloc>>::rect_for(
                 command.aabb(tfx, stroke),
                 self.rect,
                 N as u32);
@@ -133,7 +132,7 @@ impl<'img, const N: usize> Tile<'img, [F32x<N>; 4]> where LaneCount<N>: Supporte
             return;
         }
 
-        let mut r = Rasterizer::new(raster_size.x(), raster_size.y());
+        let mut r = Rasterizer::new(raster_size);
         let mut tfx = tfx;
         tfx.columns[2] -= raster_origin;
         command.rasterize(tfx, &mut r, stroke);
@@ -141,16 +140,15 @@ impl<'img, const N: usize> Tile<'img, [F32x<N>; 4]> where LaneCount<N>: Supporte
         let color = command.color();
 
         let mask = r.accumulate();
-        fill_mask(&mut self.img, blit_offset, &mask, argb_unpack(color));
+        fill_mask(&mut self.img, blit_offset, mask.view(), argb_unpack(color));
     }
-
 }
 
 
 pub fn fill_mask<const N: usize>(
     target: &mut ImgMut<[F32x<N>; 4]>,
     offset: U32x2,
-    mask: &Mask,
+    mask: Img<f32>,
     color: F32x4)
     where LaneCount<N>: SupportedLaneCount
 {
@@ -159,7 +157,7 @@ pub fn fill_mask<const N: usize>(
     let size = target.size() * U32x2::new(n, 1);
 
     let begin = offset;
-    let end   = (offset + mask.bounds()).min(size);
+    let end   = (offset + mask.size()).min(size);
     if begin.lanes_eq(end).any() {
         return;
     }
@@ -175,31 +173,31 @@ pub fn fill_mask<const N: usize>(
             let mask_x = (x - begin.x()) as usize;
             let mask_y = (y - begin.y()) as usize;
 
-            let coverage = mask.read(mask_x, mask_y);
+            let coverage = F32x::from_array(mask.read_n(mask_x, mask_y));
 
             let p = (u as usize, y as usize);
 
-            if coverage.lanes_lt(<F32x<N>>::splat(0.5/255.0)).all() {
+            if coverage.lanes_lt(F32x::splat(0.5/255.0)).all() {
                 continue;
             }
-            if color[3] == 1.0 && coverage.lanes_gt(<F32x<N>>::splat(254.5/255.0)).all() {
+            if color[3] == 1.0 && coverage.lanes_gt(F32x::splat(254.5/255.0)).all() {
                 target[p] = [
-                    <F32x<N>>::splat(color[0]),
-                    <F32x<N>>::splat(color[1]),
-                    <F32x<N>>::splat(color[2]),
-                    <F32x<N>>::splat(1.0),
+                    F32x::splat(color[0]),
+                    F32x::splat(color[1]),
+                    F32x::splat(color[2]),
+                    F32x::splat(1.0),
                 ];
                 continue;
             }
 
             let [tr, tg, tb, ta] = target[p];
 
-            let sr = <F32x<N>>::splat(color[0]);
-            let sg = <F32x<N>>::splat(color[1]);
-            let sb = <F32x<N>>::splat(color[2]);
-            let sa = <F32x<N>>::splat(color[3]) * coverage;
+            let sr = F32x::splat(color[0]);
+            let sg = F32x::splat(color[1]);
+            let sb = F32x::splat(color[2]);
+            let sa = F32x::splat(color[3]) * coverage;
 
-            let one = <F32x<N>>::splat(1.0);
+            let one = F32x::splat(1.0);
             target[p] = [
                 sa*sr + (one - sa)*ta*tr,
                 sa*sg + (one - sa)*ta*tg,

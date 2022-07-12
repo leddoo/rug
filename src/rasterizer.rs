@@ -4,7 +4,7 @@ use crate::float::*;
 use crate::alloc::*;
 use crate::geometry::*;
 use crate::path::*;
-use crate::image::{Mask};
+use crate::image::*;
 
 
 #[derive(Clone, Copy, Debug)]
@@ -22,10 +22,10 @@ pub const FLATTEN_RECURSION: u32 = 16;
 
 const BUFFER_SIZE: usize = 32;
 
-pub struct Rasterizer<'a> {
+pub struct Rasterizer<A: Alloc> {
     pub flatten_tolerance: f32,
     pub flatten_recursion: u32,
-    deltas: Mask<'a>,
+    deltas: Image<f32, A>,
     size: F32x2,
     safe_size: F32x2,
     deltas_len: i32,
@@ -34,18 +34,18 @@ pub struct Rasterizer<'a> {
 }
 
 
-impl Rasterizer<'static> {
-    #[inline(always)]
-    pub fn new(width: u32, height: u32) -> Self {
-        Rasterizer::new_in(width, height, &GlobalAlloc)
+impl Rasterizer<GlobalAlloc> {
+    pub fn new(size: U32x2) -> Self {
+        Rasterizer::new_in(size, GlobalAlloc)
     }
 }
 
-impl<'a> Rasterizer<'a> {
-    pub fn new_in(width: u32, height: u32, alloc: &'a dyn Alloc) -> Self {
-        let size = F32x2::new(width as f32, height as f32);
-        let deltas = Mask::new_in(width + 2, height + 1, alloc);
-        let deltas_len = deltas.data.len().try_into().unwrap();
+impl<A: Alloc> Rasterizer<A> {
+    pub fn new_in(size: U32x2, alloc: A) -> Self {
+        let mask_size = size + U32x2::new(2, 1);
+        let deltas = Image::new_in(mask_size.x(), mask_size.y(), 0.0, alloc);
+        let deltas_len = deltas.data().len().try_into().unwrap();
+        let size = size.as_i32().to_f32();
         Rasterizer {
             flatten_tolerance: FLATTEN_TOLERANCE,
             flatten_recursion: FLATTEN_RECURSION,
@@ -106,7 +106,7 @@ impl<'a> Rasterizer<'a> {
     }
 
     #[cfg(target_arch = "x86_64")]
-    pub fn accumulate(mut self) -> Mask<'a> {
+    pub fn accumulate(mut self) -> Image<f32, A> {
         if self.buffered > 0 {
             self.flush();
         }
@@ -123,13 +123,13 @@ impl<'a> Rasterizer<'a> {
             let aligned_w = w/4*4;
 
             for x in (0..aligned_w).step_by(4) {
-                let mut d = deltas.read(x, y);
+                let mut d = deltas.read_n(x, y).into();
 
                 d = d + shift::<4>(d);
                 d = d + shift::<8>(d);
                 c = c + d;
 
-                deltas.write(x, y, c.abs().at_mostf(F32x4::splat(1.0)));
+                deltas.write_n(x, y, c.abs().at_mostf(F32x4::splat(1.0)).into());
 
                 c = F32x4::splat(c[3]);
 
@@ -149,7 +149,7 @@ impl<'a> Rasterizer<'a> {
             }
         }
 
-        deltas.truncate(w as u32, h as u32);
+        deltas.truncate(U32x2::new(w as u32, h as u32));
         deltas
     }
 
@@ -284,7 +284,7 @@ impl<'a> Rasterizer<'a> {
         }
 
         #[inline(always)]
-        fn add_deltas(r: &mut Rasterizer, row_base: I32v, x_i: F32v,
+        fn add_deltas<A: Alloc>(r: &mut Rasterizer<A>, row_base: I32v, x_i: F32v,
             x0: F32v, y0: F32v, x1: F32v, y1: F32v
         ) {
             let delta = y1 - y0;
@@ -304,7 +304,7 @@ impl<'a> Rasterizer<'a> {
             assert!(o.lanes_ge(I32v::splat(0)).all());
             assert!(o.lanes_lt(I32v::splat(r.deltas_len - 1)).all());
 
-            let deltas = r.deltas.data.as_mut_ptr();
+            let deltas = r.deltas.data_mut().as_mut_ptr();
             for i in 0..WIDTH {
                 unsafe {
                     *deltas.add(o[i] as usize + 0) += delta_left[i];
@@ -357,9 +357,9 @@ impl<'a> Rasterizer<'a> {
 
 
         #[inline(always)]
-        unsafe fn add_delta(r: &mut Rasterizer, row_base: usize, y0: f32, y1: f32) {
+        unsafe fn add_delta<A: Alloc>(r: &mut Rasterizer<A>, row_base: usize, y0: f32, y1: f32) {
             let delta = y1 - y0;
-            r.deltas.data[row_base + 0] += delta;
+            r.deltas.data_mut()[row_base + 0] += delta;
         }
     }
 
@@ -406,7 +406,12 @@ impl<'a> Rasterizer<'a> {
 
 
         #[inline(always)]
-        fn clamp(r: &mut Rasterizer, mut x: f32, mut y: f32, dx_over_dy: f32, dy_over_dx: f32, is_first: bool) -> (f32, f32) {
+        fn clamp<A: Alloc>(r: &mut Rasterizer<A>,
+            mut x: f32, mut y: f32,
+            dx_over_dy: f32, dy_over_dx: f32,
+            is_first: bool)
+            -> (f32, f32)
+        {
             let w = r.size.x();
             let h = r.size.y();
 
@@ -500,7 +505,7 @@ impl<'a> Rasterizer<'a> {
     }
 
 
-    pub fn fill_path<A: Alloc>(&mut self, path: &Path<A>, tfx: Transform) {
+    pub fn fill_path<B: Alloc>(&mut self, path: &Path<B>, tfx: Transform) {
         use IterEvent::*;
         let mut begin = None;
 

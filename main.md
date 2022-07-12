@@ -1,5 +1,4 @@
 todo:
-- use Image in rasterizer.
 - default effect:
     - i guess that's just `Tile::execute`.
     - but also fill visible.
