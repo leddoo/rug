@@ -34,14 +34,17 @@ pub struct Rasterizer<'a> {
 }
 
 
-impl<'a> Rasterizer<'a> {
-    pub fn new(width: u32, height: u32) -> Rasterizer<'a> {
+impl Rasterizer<'static> {
+    #[inline(always)]
+    pub fn new(width: u32, height: u32) -> Self {
         Rasterizer::new_in(width, height, &GlobalAlloc)
     }
+}
 
-    pub fn new_in(width: u32, height: u32, allocator: &'a dyn Alloc) -> Rasterizer<'a> {
+impl<'a> Rasterizer<'a> {
+    pub fn new_in(width: u32, height: u32, alloc: &'a dyn Alloc) -> Self {
         let size = F32x2::new(width as f32, height as f32);
-        let deltas = Mask::new_in(width + 2, height + 1, allocator);
+        let deltas = Mask::new_in(width + 2, height + 1, alloc);
         let deltas_len = deltas.data.len().try_into().unwrap();
         Rasterizer {
             flatten_tolerance: FLATTEN_TOLERANCE,
@@ -53,6 +56,26 @@ impl<'a> Rasterizer<'a> {
             buffer: [[F32x2::ZERO; 2]; BUFFER_SIZE],
             buffered: 0,
         }
+    }
+
+    /// - clip must be a valid integer rect with clip.min >= zero.
+    /// - returns (raster_size, raster_origin, blit_offset).
+    /// - raster_size is the size of the rasterizer's rect.
+    /// - raster_origin is the global position of the rasterizer's origin.
+    /// - blit_offset is the integer offset from aabb to the rasterizer's origin.
+    pub fn rect_for(rect: Rect, clip: Rect, align: u32) -> (U32x2, F32x2, U32x2) {
+        // compute rasterizer's integer rect in global coordinates.
+        let raster_rect = unsafe { rect.clamp_to(clip).round_inclusive_unck() };
+
+        // pad rasterizer rect to meet alignment requirement.
+        let align = align as f32;
+        let x0 = floor_fast(raster_rect.min.x() / align) * align;
+        let x1 = ceil_fast(raster_rect.max.x() / align)  * align;
+
+        let raster_size   = F32x2::new(x1 - x0, raster_rect.height()).to_i32().as_u32();
+        let raster_origin = F32x2::new(x0,      raster_rect.min.y());
+        let blit_offset   = (raster_origin - clip.min).to_i32().as_u32();
+        (raster_size, raster_origin, blit_offset)
     }
 
     pub fn width(&self)  -> u32 { self.deltas.width() - 2 }

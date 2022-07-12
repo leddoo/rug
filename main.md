@@ -1,8 +1,12 @@
 todo:
-- use Image in rasterizer
-- remove alpha image.
+- use Image in rasterizer.
+- default effect:
+    - i guess that's just `Tile::execute`.
+    - but also fill visible.
+    - thinking make `Effect` trait.
+- shadow effect.
 
-- compositor (dx11 backend).
+- allocators.
 
 - aot strokes in main
 - rayon mt in main.

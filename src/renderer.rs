@@ -4,7 +4,6 @@ use sti::simd::*;
 
 use crate::{
     alloc::*,
-    float::*,
     geometry::{rect, Rect, Transform},
     image::*,
     path::*,
@@ -29,6 +28,41 @@ pub enum Command<A: Alloc> {
 }
 
 
+impl<A: Alloc> Command<A> {
+    #[inline(always)]
+    pub fn aabb(&self, tfx: Transform, stroke: &Option<SoaPath>) -> Rect {
+        tfx.aabb_transform(match self {
+            Command::FillPathSolid { path, color: _, rule: _ } =>
+                path.aabb(),
+
+            Command::StrokePathSolid { path: _, color: _, width: _, cap: _, join: _ } =>
+                stroke.as_ref().unwrap().aabb,
+        })
+    }
+
+    #[inline(always)]
+    pub fn rasterize(&self, tfx: Transform, r: &mut Rasterizer, stroke: &Option<SoaPath>) {
+        match self {
+            Command::FillPathSolid { path, color: _, rule: _ } => {
+                r.fill_path(path, tfx);
+            }
+
+            Command::StrokePathSolid { path: _, color: _, width: _, cap: _, join: _ } => {
+                r.fill_soa_path(stroke.as_ref().unwrap(), tfx);
+            }
+        }
+    }
+
+    #[inline(always)]
+    pub fn color(&self) -> u32 {
+        match self {
+            Command::FillPathSolid { path: _, color, rule: _ } => *color,
+            Command::StrokePathSolid { path: _, color, width: _, cap: _, join: _ } => *color,
+        }
+    }
+}
+
+
 /// - commands[i] ~ masks[index_offset + i], strokes[index_offset + i]
 /// - strokes must be Some for all stroke commands
 pub fn fill_masks<A: Alloc>(
@@ -46,26 +80,16 @@ pub fn fill_masks<A: Alloc>(
 
     for (index, command) in commands.iter().enumerate() {
         let index = index + index_offset;
-        match command {
-            Command::FillPathSolid { path, color: _, rule: _ } => {
-                let aabb = tfx.aabb_transform(path.aabb());
-                fill_visible(&masks, index, aabb, tile_size, tile_counts, tiles_x);
-            },
-
-            Command::StrokePathSolid { path: _, color: _, width: _, cap: _, join: _ } => {
-                let path = strokes[index].as_ref().unwrap();
-                let aabb = tfx.aabb_transform(path.aabb);
-                fill_visible(&masks, index, aabb, tile_size, tile_counts, tiles_x);
-            },
-        }
+        let aabb = command.aabb(tfx, &strokes[index]);
+        fill_visible(&masks, index, aabb, tile_size, tile_counts, tiles_x);
     }
 
 
     #[inline(always)]
-    fn fill_visible(masks: &[CommandMask], cmd_index: usize, path_aabb: Rect,
+    fn fill_visible(masks: &[CommandMask], cmd_index: usize, cmd_aabb: Rect,
         tile_size: f32, tile_counts: F32x2, tiles_x: u32,
     ) {
-        let rect = rect(path_aabb.min.div(tile_size), path_aabb.max.div(tile_size));
+        let rect = rect(cmd_aabb.min.div(tile_size), cmd_aabb.max.div(tile_size));
         let rect = unsafe { rect.round_inclusive_unck() };
         let begin = unsafe { rect.min.clamp(F32x2::ZERO, tile_counts).to_i32_unck().as_u32() };
         let end   = unsafe { rect.max.clamp(F32x2::ZERO, tile_counts).to_i32_unck().as_u32() };
@@ -99,55 +123,25 @@ impl<'img, const N: usize> Tile<'img, [F32x<N>; 4]> where LaneCount<N>: Supporte
         tfx: Transform,
         stroke: &Option<SoaPath>,
     ) {
-        // look, it ain't pretty, but it works.
-        match command {
-            Command::FillPathSolid { path, color, rule: _ } => {
-                let r = rasterize(self.rect, path.aabb(), N as f32, tfx, |tfx, r| {
-                    r.fill_path(path, tfx)
-                });
+        let (raster_size, raster_origin, blit_offset) =
+            Rasterizer::rect_for(
+                command.aabb(tfx, stroke),
+                self.rect,
+                N as u32);
 
-                if let Some((offset, mask)) = r {
-                    fill_mask(&mut self.img, offset, &mask, argb_unpack(*color));
-                }
-            },
-
-            Command::StrokePathSolid { path: _, color, width: _, cap: _, join: _ } => {
-                let path = stroke.as_ref().unwrap();
-                let r = rasterize(self.rect, path.aabb, N as f32, tfx, |tfx, r| {
-                    r.fill_soa_path(path, tfx)
-                });
-
-                if let Some((offset, mask)) = r {
-                    fill_mask(&mut self.img, offset, &mask, argb_unpack(*color));
-                }
-            },
+        if raster_size.lanes_eq(U32x2::ZERO).any() {
+            return;
         }
 
-        fn rasterize<F: FnOnce(Transform, &mut Rasterizer)>(tile: Rect, aabb: Rect, n: f32, tfx: Transform, f: F)
-            -> Option<(U32x2, Mask<'static>)>
-        {
-            let aabb = tfx.aabb_transform(aabb);
-            let aabb = unsafe { aabb.clamp_to(tile).round_inclusive_unck() };
+        let mut r = Rasterizer::new(raster_size.x(), raster_size.y());
+        let mut tfx = tfx;
+        tfx.columns[2] -= raster_origin;
+        command.rasterize(tfx, &mut r, stroke);
 
-            let x0 = floor_fast(aabb.min.x() / n) * n;
-            let x1 = ceil_fast(aabb.max.x() / n)  * n;
+        let color = command.color();
 
-            let mask_w = (x1 - x0)     as u32;
-            let mask_h = aabb.height() as u32;
-            if mask_w == 0 || mask_h == 0 {
-                return None;
-            }
-
-            let p0 = F32x2::new(x0, aabb.min.y());
-            let mut tfx = tfx;
-            tfx.columns[2] -= p0;
-
-            let mut r = Rasterizer::new(mask_w, mask_h);
-            f(tfx, &mut r);
-
-            let offset = (p0 - tile.min).to_i32().as_u32();
-            Some((offset, r.accumulate()))
-        }
+        let mask = r.accumulate();
+        fill_mask(&mut self.img, blit_offset, &mask, argb_unpack(color));
     }
 
 }
