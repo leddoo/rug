@@ -4,11 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-sti = { version = "0.2.0", git = "https://github.com/leddoo/sti.git" }
-rug = {path = "../"}
+sti = { path = "../sti" }
+rug = { path = "../" }
 libm = "0.2.2"
 roxmltree = "0.14"
 svgtypes = "0.8"
+image = "0.24.6"
 
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.36.1"

@@ -1,3 +1,15 @@
+
+todo:
+- use a workspace.
+- cross platform gui demo.
+
+
+
+---
+# old stuff
+
+
+
 todo:
 - default effect:
     - i guess that's just `Tile::execute`.

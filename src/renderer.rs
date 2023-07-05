@@ -1,6 +1,6 @@
 use core::sync::atomic::{AtomicU64, Ordering};
 
-use sti::simd::*;
+use sti::simd::{*, U32Ext, F32Ext};
 
 use crate::{
     alloc::*,
@@ -91,8 +91,8 @@ pub fn fill_masks<A: Alloc>(
     ) {
         let rect = rect(cmd_aabb.min.div(tile_size), cmd_aabb.max.div(tile_size));
         let rect = unsafe { rect.round_inclusive_unck() };
-        let begin = unsafe { rect.min.clamp(F32x2::ZERO, tile_counts).to_i32_unck().as_u32() };
-        let end   = unsafe { rect.max.clamp(F32x2::ZERO, tile_counts).to_i32_unck().as_u32() };
+        let begin = unsafe { rect.min.clampf(F32x2::ZERO, tile_counts).to_i32_unck().as_u32() };
+        let end   = unsafe { rect.max.clampf(F32x2::ZERO, tile_counts).to_i32_unck().as_u32() };
 
         for y in begin[1]..end[1] {
             for x in begin[0]..end[0] {
@@ -128,7 +128,7 @@ impl<'img, const N: usize> Tile<'img, [F32x<N>; 4]> where LaneCount<N>: Supporte
                 self.rect,
                 N as u32);
 
-        if raster_size.lanes_eq(U32x2::ZERO).any() {
+        if raster_size.simd_eq(U32x2::ZERO).any() {
             return;
         }
 
@@ -157,8 +157,8 @@ pub fn fill_mask<const N: usize>(
     let size = target.size() * U32x2::new(n, 1);
 
     let begin = offset;
-    let end   = (offset + mask.size()).min(size);
-    if begin.lanes_eq(end).any() {
+    let end   = (offset + mask.size()).simd_min(size);
+    if begin.simd_eq(end).any() {
         return;
     }
 
@@ -177,10 +177,10 @@ pub fn fill_mask<const N: usize>(
 
             let p = (u as usize, y as usize);
 
-            if coverage.lanes_lt(F32x::splat(0.5/255.0)).all() {
+            if coverage.simd_lt(F32x::splat(0.5/255.0)).all() {
                 continue;
             }
-            if color[3] == 1.0 && coverage.lanes_gt(F32x::splat(254.5/255.0)).all() {
+            if color[3] == 1.0 && coverage.simd_gt(F32x::splat(254.5/255.0)).all() {
                 target[p] = [
                     F32x::splat(color[0]),
                     F32x::splat(color[1]),

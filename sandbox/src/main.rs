@@ -1,17 +1,17 @@
 #![feature(portable_simd)]
 #![feature(allocator_api)]
 
-mod win32;
+//mod win32;
 
 use sti::simd::*;
 use rug::*;
 
 fn main() {
-    if 0==1 {
+    if 1==1 {
         let svg = {
-            //let file = include_bytes!(r"D:\dev\vg-inputs\svg\tiger.svg");
-            let file = include_bytes!(r"D:\dev\vg-inputs\svg\paris-30k.svg");
-            //let file = include_bytes!(r"D:\dev\vg-inputs\svg\hawaii.svg");
+            //let file = include_bytes!(r"../../vg-inputs/svg/tiger.svg");
+            let file = include_bytes!(r"../../vg-inputs/svg/paris-30k.svg");
+            //let file = include_bytes!(r"../../vg-inputs/svg/hawaii.svg");
             parse_xml(core::str::from_utf8(file).unwrap())
         };
 
@@ -35,12 +35,29 @@ fn main() {
 
         println!("{:?}", t0.elapsed() / iters);
 
-        win32::exit();
+        let w = target.width()  as usize;
+        let h = target.height() as usize;
+        let mut img = vec![0; w*h*4];
+        for y in 0..h {
+            let yd = h-1 - y;
+            for x in 0..w {
+                let p = target[(x, y)];
+                img[(yd*w + x)*4 + 0] = (p >> 16) as u8;
+                img[(yd*w + x)*4 + 1] = (p >>  8) as u8;
+                img[(yd*w + x)*4 + 2] = (p >>  0) as u8;
+                img[(yd*w + x)*4 + 3] = (p >> 24) as u8;
+            }
+        }
+
+        ::image::save_buffer("output.png", &img, target.width(), target.height(), ::image::ColorType::Rgba8).unwrap()
+
+        //win32::exit();
     }
 
-    win32::run(program);
+    //win32::run(program);
 }
 
+/*
 fn program() {
     let svg = {
         //let file = include_bytes!(r"D:\dev\vg-inputs\svg\tiger.svg");
@@ -123,6 +140,7 @@ fn program() {
         }
     }
 }
+*/
 
 
 fn parse_xml(xml: &str) -> Vec<Command<alloc::GlobalAlloc>> {

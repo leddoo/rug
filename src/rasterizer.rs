@@ -83,7 +83,7 @@ impl<A: Alloc> Rasterizer<A> {
 
 
     #[cfg(not(target_arch = "x86_64"))]
-    pub fn accumulate(mut self) -> Mask<'a> {
+    pub fn accumulate(mut self) -> Image<f32, A> {
         if self.buffered > 0 {
             self.flush();
         }
@@ -101,7 +101,7 @@ impl<A: Alloc> Rasterizer<A> {
             }
         }
 
-        deltas.truncate(w as u32, h as u32);
+        deltas.truncate(U32x2::new(w as u32, h as u32));
         deltas
     }
 
@@ -207,8 +207,8 @@ impl<A: Alloc> Rasterizer<A> {
 
             let x_step = F32v::ONE.copysign(dx);
             let y_step = F32v::ONE.copysign(dy);
-            let x_nudge = -dx.lanes_lt(F32v::ZERO).as_i32().to_f32();
-            let y_nudge = -dy.lanes_lt(F32v::ZERO).as_i32().to_f32();
+            let x_nudge = -dx.simd_lt(F32v::ZERO).as_i32().to_f32();
+            let y_nudge = -dy.simd_lt(F32v::ZERO).as_i32().to_f32();
 
             let x_dt = dx_inv.abs();
             let y_dt = dy_inv.abs();
@@ -240,10 +240,10 @@ impl<A: Alloc> Rasterizer<A> {
                 let prev_base = row_base;
                 let prev_x_i  = x_i;
 
-                let x_left = x_rem.lanes_gt(I32v::ZERO);
-                let y_left = y_rem.lanes_gt(I32v::ZERO);
+                let x_left = x_rem.simd_gt(I32v::ZERO);
+                let y_left = y_rem.simd_gt(I32v::ZERO);
                 let any_left = x_left | y_left;
-                let is_x = (x_t_next.lanes_le(y_t_next) & x_left) | !y_left;
+                let is_x = (x_t_next.simd_le(y_t_next) & x_left) | !y_left;
                 let is_y = !is_x;
 
                 let x = any_left.select(is_x.select(x_next, x0 + y_t_next*dx), x_prev);
@@ -266,8 +266,8 @@ impl<A: Alloc> Rasterizer<A> {
                 y_prev = y;
             }
 
-            debug_assert!(row_base.lanes_eq((stride * y_i1).to_i32()).all());
-            debug_assert!(x_i.lanes_eq(x_i1).all());
+            debug_assert!(row_base.simd_eq((stride * y_i1).to_i32()).all());
+            debug_assert!(x_i.simd_eq(x_i1).all());
 
             add_deltas(self, row_base, x_i, x_prev, y_prev, x1, y1);
         }
@@ -279,7 +279,7 @@ impl<A: Alloc> Rasterizer<A> {
 
         #[inline(always)]
         fn safe_div(a: F32v, b: F32v, default: F32v) -> F32v {
-            let is_zero = b.lanes_eq(F32v::ZERO);
+            let is_zero = b.simd_eq(F32v::ZERO);
             is_zero.select(default, a/b)
         }
 
@@ -293,16 +293,16 @@ impl<A: Alloc> Rasterizer<A> {
             let delta_right = delta * x_mid;
             let delta_left  = delta - delta_right;
 
-            debug_assert!(x_mid.lanes_ge(F32v::splat(0.0 - ZERO_TOLERANCE)).all());
-            debug_assert!(x_mid.lanes_le(F32v::splat(1.0 + ZERO_TOLERANCE)).all());
-            debug_assert!(x_i.lanes_ge(F32v::splat(0.0)).all());
-            debug_assert!(x_i.lanes_le(F32v::splat(r.size.x())).all()); // le because padding
+            debug_assert!(x_mid.simd_ge(F32v::splat(0.0 - ZERO_TOLERANCE)).all());
+            debug_assert!(x_mid.simd_le(F32v::splat(1.0 + ZERO_TOLERANCE)).all());
+            debug_assert!(x_i.simd_ge(F32v::splat(0.0)).all());
+            debug_assert!(x_i.simd_le(F32v::splat(r.size.x())).all()); // le because padding
 
             let x = unsafe { x_i.to_i32_unck() };
             let o = row_base + x;
 
-            assert!(o.lanes_ge(I32v::splat(0)).all());
-            assert!(o.lanes_lt(I32v::splat(r.deltas_len - 1)).all());
+            assert!(o.simd_ge(I32v::splat(0)).all());
+            assert!(o.simd_lt(I32v::splat(r.deltas_len - 1)).all());
 
             let deltas = r.deltas.data_mut().as_mut_ptr();
             for i in 0..WIDTH {
@@ -540,7 +540,7 @@ impl<A: Alloc> Rasterizer<A> {
 
     #[inline(always)]
     pub fn is_invisible(&self, aabb: Rect) -> bool {
-        aabb.min.lanes_ge(self.size).any() || aabb.max.y() <= 0.0
+        aabb.min.simd_ge(self.size).any() || aabb.max.y() <= 0.0
     }
 
     #[inline(always)]

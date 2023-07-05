@@ -21,7 +21,7 @@ impl Rect {
 
     #[inline(always)]
     pub fn valid(self) -> bool {
-        self.min.lanes_le(self.max).all()
+        self.min.simd_le(self.max).all()
     }
 
     #[inline(always)]
@@ -37,12 +37,12 @@ impl Rect {
 
     #[inline(always)]
     pub fn contains(&self, p: F32x2) -> bool {
-        p.lanes_ge(self.min).all() && p.lanes_lt(self.max).all()
+        p.simd_ge(self.min).all() && p.simd_lt(self.max).all()
     }
 
     #[inline(always)]
     pub fn contains_inclusive(&self, p: F32x2) -> bool {
-        p.lanes_ge(self.min).all() && p.lanes_le(self.max).all()
+        p.simd_ge(self.min).all() && p.simd_le(self.max).all()
     }
 
     #[inline(always)]
@@ -53,8 +53,8 @@ impl Rect {
     #[inline(always)]
     pub fn clamp_to(self, other: Rect) -> Rect {
         rect(
-            self.min.clamp(other.min, other.max),
-            self.max.clamp(other.min, other.max),
+            self.min.clampf(other.min, other.max),
+            self.max.clampf(other.min, other.max),
         )
     }
 

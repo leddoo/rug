@@ -34,7 +34,7 @@ macro_rules! _impl {
         }
 
         pub fn truncate(&mut self, new_size: U32x2) {
-            assert!(new_size.lanes_le(self.size).all());
+            assert!(new_size.simd_le(self.size).all());
             self.len  = (new_size.x() * new_size.y()) as usize;
             self.size = new_size;
         }
@@ -147,6 +147,14 @@ impl<T: Copy, A: Alloc> Image<T, A> {
         unsafe { core::slice::from_raw_parts_mut(self.data.as_mut_ptr(), self.len) }
     }
 
+    #[inline(always)]
+    pub fn bytes(&self) -> &[u8] {
+        unsafe { core::slice::from_raw_parts(
+            self.data.as_ptr() as *const u8, 
+            self.len * core::mem::size_of::<T>())
+        }
+    }
+
     _impl!();
     _impl_mut!();
 
@@ -218,8 +226,8 @@ impl<'img, T: Copy> ImgMut<'img, T> {
     {
         let size = src.size.as_i32()*I32x2::new(N as i32, 1);
 
-        let begin = to         .clamp(I32x2::ZERO, self.size.as_i32()).cast::<usize>();
-        let end   = (to + size).clamp(I32x2::ZERO, self.size.as_i32()).cast::<usize>();
+        let begin = to         .simd_clamp(I32x2::ZERO, self.size.as_i32()).cast::<usize>();
+        let end   = (to + size).simd_clamp(I32x2::ZERO, self.size.as_i32()).cast::<usize>();
 
         let [w, h] = *(end - begin).as_array();
 
@@ -247,8 +255,8 @@ impl<'img, T: Copy> ImgMut<'img, T> {
     }
 
     pub fn sub_view(&mut self, begin: U32x2, end: U32x2) -> ImgMut<T> {
-        assert!(begin.lanes_le(end).all());
-        assert!(end.lanes_le(self.size).all());
+        assert!(begin.simd_le(end).all());
+        assert!(end.simd_le(self.size).all());
         let size = end - begin;
 
         let index = (begin.y() as usize)*self.stride + begin.x() as usize;
@@ -286,7 +294,7 @@ impl<'img, T: Copy> ImgMut<'img, T> {
         for y in 0..tile_counts.y() {
             for x in 0..tile_counts.x() {
                 let begin = U32x2::new(x, y) * tile_size;
-                let end   = (begin + tile_size).min(self.size);
+                let end   = (begin + tile_size).simd_min(self.size);
 
                 let tile = self.sub_tile(begin, end);
                 // cast lifetime to outer borrow.
@@ -365,10 +373,10 @@ pub fn argb_u8x_pack<const N: usize>(v: [F32x<N>; 4]) -> U32x<N> where LaneCount
     let max = F32x::splat(255.0);
     let [r, g, b, a] = v;
     unsafe { argb_u8x_pack_clamped_255([
-        (scale*r + offset).clamp(min, max),
-        (scale*g + offset).clamp(min, max),
-        (scale*b + offset).clamp(min, max),
-        (scale*a + offset).clamp(min, max),
+        (scale*r + offset).clampf(min, max),
+        (scale*g + offset).clampf(min, max),
+        (scale*b + offset).clampf(min, max),
+        (scale*a + offset).clampf(min, max),
     ]) }
 }
 
