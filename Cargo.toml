@@ -1,8 +1,6 @@
-[package]
-name = "rug"
-version = "0.1.0"
-edition = "2021"
+[workspace]
 
-[dependencies]
-sti = { path = "sti" }
-libm = "0.2.2"
+members = [
+    "rug",
+]
+
