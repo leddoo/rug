@@ -1,8 +1,6 @@
 
 - todo:
-    - sti simd module.
     - port all the basic code:
-        - geometry.
         - images.
         - paths.
     - traditional active list rasterizer.
