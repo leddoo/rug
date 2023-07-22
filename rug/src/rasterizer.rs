@@ -5,17 +5,6 @@ use sti::float::F32Ext;
 use crate::geometry::*;
 use crate::image::*;
 
-// @temp
-#[inline(always)]
-pub fn floor(v: f32) -> f32 {
-    F32x4::splat(v).floor()[0]
-}
-
-#[inline(always)]
-pub fn ceil(v: f32) -> f32 {
-    F32x4::splat(v).ceil()[0]
-}
-
 
 #[derive(Clone, Copy, Debug)]
 pub enum FillRule {
@@ -150,8 +139,8 @@ impl<A: Alloc> Rasterizer<A> {
 
         // pad rasterizer rect to meet alignment requirement.
         let align = align as f32;
-        let x0 = floor(raster_rect.min.x() / align) * align;
-        let x1 = ceil(raster_rect.max.x() / align)  * align;
+        let x0 = (raster_rect.min.x() / align).ffloor() * align;
+        let x1 = (raster_rect.max.x() / align).fceil()  * align;
 
         let raster_size   = F32x2::new(x1 - x0, raster_rect.height()).to_i32_unck().as_u32();
         let raster_origin = F32x2::new(x0,      raster_rect.min.y());
@@ -330,8 +319,8 @@ impl<A: Alloc> Rasterizer<A> {
         let y_step  = 1f32.copysign(dy);
         let y_nudge = if dy >= 0.0 { 0f32 } else { 1f32 };
 
-        let y_i0 = floor(y0);
-        let y_i1 = floor(y1);
+        let y_i0 = y0.ffloor();
+        let y_i1 = y1.ffloor();
 
         let y_steps = (y_i1 - y_i0).abs() as u32;
         let steps = y_steps;
