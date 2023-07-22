@@ -20,6 +20,11 @@ pub type ImgMut<'a, T> = ImgImpl<'a, T, true>;
 
 impl<'a, T: Copy, const MUT: bool> ImgImpl<'a, T, MUT> {
     #[inline(always)]
+    pub fn data(&self) -> &[T] {
+        unsafe { core::slice::from_raw_parts(self.data, self.len) }
+    }
+
+    #[inline(always)]
     pub fn size(&self) -> U32x2 { self.size }
 
     #[inline(always)]
@@ -43,6 +48,11 @@ impl<'a, T: Copy, const MUT: bool> ImgImpl<'a, T, MUT> {
 }
 
 impl<'a, T: Copy> ImgImpl<'a, T, true> {
+    #[inline(always)]
+    pub fn data_mut(&mut self) -> &mut [T] { 
+        unsafe { core::slice::from_raw_parts_mut(self.data, self.len) }
+    }
+
     #[track_caller]
     #[inline(always)]
     pub fn write_n<const N: usize>(&mut self, x: usize, y: usize, vs: [T; N]) {
@@ -54,7 +64,28 @@ impl<'a, T: Copy> ImgImpl<'a, T, true> {
     }
 }
 
+impl<'a, T: Copy, const MUT: bool> core::ops::Index<(usize, usize)> for ImgImpl<'a, T, MUT> {
+    type Output = T;
 
+    #[inline(always)]
+    fn index(&self, (x, y): (usize, usize)) -> &Self::Output {
+        assert!(x < self.width() as usize && y < self.height() as usize);
+        let stride = self.stride();
+        &self.data()[y*stride + x]
+    }
+}
+
+impl<'a, T: Copy> core::ops::IndexMut<(usize, usize)> for ImgImpl<'a, T, true> {
+    fn index_mut(&mut self, (x, y): (usize, usize)) -> &mut Self::Output {
+        assert!(x < self.width() as usize && y < self.height() as usize);
+        let stride = self.stride();
+        &mut self.data_mut()[y*stride + x]
+    }
+}
+
+
+
+// @temp
 use core::alloc::Layout;
 
 pub struct Box<T: ?Sized, A: Alloc> {
@@ -201,6 +232,13 @@ impl<T: Copy, A: Alloc> Image<T, A> {
 
 
     #[inline(always)]
+    pub fn data(&self) -> &[T] { self.data.as_ref() }
+
+    #[inline(always)]
+    pub fn data_mut(&mut self) -> &mut [T] { self.data.as_mut() }
+
+
+    #[inline(always)]
     pub fn size(&self) -> U32x2 { self.size }
 
     #[inline(always)]
@@ -234,5 +272,23 @@ impl<T: Copy, A: Alloc> Image<T, A> {
     }
 }
 
+impl<T: Copy, A: Alloc> core::ops::Index<(usize, usize)> for Image<T, A> {
+    type Output = T;
+
+    #[inline(always)]
+    fn index(&self, (x, y): (usize, usize)) -> &Self::Output {
+        assert!(x < self.width() as usize && y < self.height() as usize);
+        let stride = self.stride();
+        &self.data()[y*stride + x]
+    }
+}
+
+impl<T: Copy, A: Alloc> core::ops::IndexMut<(usize, usize)> for Image<T, A> {
+    fn index_mut(&mut self, (x, y): (usize, usize)) -> &mut Self::Output {
+        assert!(x < self.width() as usize && y < self.height() as usize);
+        let stride = self.stride();
+        &mut self.data_mut()[y*stride + x]
+    }
+}
 
 
