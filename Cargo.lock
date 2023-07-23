@@ -3,6 +3,13 @@
 version = 3
 
 [[package]]
+name = "raw"
+version = "0.1.0"
+dependencies = [
+ "rug",
+]
+
+[[package]]
 name = "rug"
 version = "0.1.0"
 dependencies = [
@@ -12,4 +19,4 @@ dependencies = [
 [[package]]
 name = "sti"
 version = "0.1.0"
-source = "git+https://github.com/leddoo/sti#19532071c95ac65610c6296f059841b830b2797a"
+source = "git+https://github.com/leddoo/sti#359ac488cd2bcb391a001bfbdf4f03d37563b5f3"

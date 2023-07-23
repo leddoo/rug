@@ -22,10 +22,10 @@ pub const FLATTEN_RECURSION: u32 = 16;
 
 const BUFFER_SIZE: usize = 32;
 
-pub struct Rasterizer<A: Alloc> {
+pub struct Rasterizer<'a> {
     pub flatten_tolerance: f32,
     pub flatten_recursion: u32,
-    deltas: Image<f32, A>,
+    deltas: ImgMut<'a, f32>,
     size: F32x2,
     safe_size: F32x2,
     deltas_len: i32,
@@ -34,17 +34,15 @@ pub struct Rasterizer<A: Alloc> {
 }
 
 
-impl Rasterizer<GlobalAlloc> {
-    pub fn new(size: U32x2) -> Self {
-        Rasterizer::new_in(size, GlobalAlloc)
-    }
-}
-
-impl<A: Alloc> Rasterizer<A> {
-    pub fn new_in(size: U32x2, alloc: A) -> Self {
+impl<'a> Rasterizer<'a> {
+    pub fn new<A: Alloc>(image: &'a mut Image<f32, A>, size: [u32; 2]) -> Self {
+        let size = U32x2::from_array(size);
         let mask_size = size + U32x2::new(2, 1);
-        let deltas = Image::new_in(mask_size.as_array(), alloc);
+        image.resize_and_clear(*mask_size, 0.0);
+
+        let deltas = image.view_mut();
         let deltas_len = deltas.data().len().try_into().unwrap();
+
         let size = size.as_i32().to_f32();
         Rasterizer {
             flatten_tolerance: FLATTEN_TOLERANCE,
@@ -101,7 +99,7 @@ impl<A: Alloc> Rasterizer<A> {
     }
 
 
-    pub fn accumulate(mut self) -> Image<f32, A> {
+    pub fn accumulate(mut self) -> ImgMut<'a, f32> {
         if self.buffered > 0 {
             self.flush();
         }
@@ -119,15 +117,14 @@ impl<A: Alloc> Rasterizer<A> {
             }
         }
 
-        // @TEMP
-        //deltas.truncate(U32x2::new(w as u32, h as u32));
+        deltas.truncate([w as u32, h as u32]);
         deltas
     }
 
 }
 
 
-impl<A: Alloc> Rasterizer<A> {
+impl<'a> Rasterizer<'a> {
     /// - clip must be a valid integer rect with clip.min >= zero.
     /// - returns (raster_size, raster_origin, blit_offset).
     /// - raster_size is the size of the rasterizer's rect.
@@ -277,7 +274,7 @@ impl<A: Alloc> Rasterizer<A> {
         }
 
         #[inline(always)]
-        fn add_deltas<A: Alloc>(r: &mut Rasterizer<A>, row_base: I32v, x_i: F32v,
+        fn add_deltas(r: &mut Rasterizer, row_base: I32v, x_i: F32v,
             x0: F32v, y0: F32v, x1: F32v, y1: F32v
         ) {
             let delta = y1 - y0;
@@ -350,7 +347,7 @@ impl<A: Alloc> Rasterizer<A> {
 
 
         #[inline(always)]
-        unsafe fn add_delta<A: Alloc>(r: &mut Rasterizer<A>, row_base: usize, y0: f32, y1: f32) {
+        unsafe fn add_delta(r: &mut Rasterizer, row_base: usize, y0: f32, y1: f32) {
             let delta = y1 - y0;
             r.deltas.data_mut()[row_base + 0] += delta;
         }
@@ -384,7 +381,7 @@ impl<A: Alloc> Rasterizer<A> {
 
 
         #[inline(always)]
-        fn clamp<A: Alloc>(r: &mut Rasterizer<A>,
+        fn clamp(r: &mut Rasterizer,
             mut x: f32, mut y: f32,
             dx_over_dy: f32, dy_over_dx: f32,
             is_first: bool)

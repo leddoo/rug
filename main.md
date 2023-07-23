@@ -1,15 +1,12 @@
 
 - todo: restore usable v1.
-    - rasterizer.
-        - ctor takes `&mut Image`, stores `ImgMut`.
-        - image truncate.
-    - simple shapes png write sample.
-        - using rasterizer & compositing manually.
+    - fix image u32/usize nonsense. ~ prob use usize everywhere.
+    - compositing (solid color fill using mask Img).
+    - paths & command buffer.
+    - renderer abstraction.
 
 - stuff:
-    - images.
-        - resize-and-clear.
-        - views & tiles.
+    - `FixedVec` for segment buffer ~ uninit.
     - paths.
     - stroking.
 
