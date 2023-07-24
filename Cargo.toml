@@ -3,5 +3,7 @@
 members = [
     "rug",
     "examples/raw",
+    "examples/api",
 ]
 
+default-members = ["examples/api"]

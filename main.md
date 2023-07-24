@@ -1,8 +1,15 @@
 
 - todo: restore usable v1.
+    - paths & command buffer.
+    - segment -> line.
+
+    - maybe use `extend` for path builder point pushes.
+    - `Drop` tests for sti vec. truncate does not look right...
+    - oom api - ipgui needs that to some extent (where dom nodes own allocations,
+      not really for the renderer, we're sol if that panics due to oom).
+
     - fix image u32/usize nonsense. ~ prob use usize everywhere.
     - compositing (solid color fill using mask Img).
-    - paths & command buffer.
     - renderer abstraction.
 
 - stuff:
