@@ -7,7 +7,8 @@ fn main() {
     pb.line_to([5.0, 4.0].into());
     pb.close();
 
-    let path = pb.build();
+    let path_buf = pb.build();
+    let path = path_buf.path();
 
     println!("{:?}", path.verbs());
     println!("{:?}", path.points());

@@ -3,6 +3,7 @@ use sti::vec::Vec;
 use sti::simd::*;
 
 use core::ptr::NonNull;
+use core::marker::PhantomData;
 use core::mem::{size_of, size_of_val};
 use core::sync::atomic::{AtomicU32, Ordering};
 
@@ -203,13 +204,19 @@ impl<A: Alloc> PathBuf<A> {
         Self { data, alloc }
     }
 
+
     #[inline(always)]
-    pub fn path(&self) -> Path { &**self }
+    fn data(&self) -> &PathData { unsafe { self.data.as_ref() } }
+
+    #[inline(always)]
+    pub fn path(&self) -> Path {
+        Path { data: self.data, phantom: PhantomData }
+    }
 }
 
 impl<A: Alloc + Clone> Clone for PathBuf<A> {
     fn clone(&self) -> Self {
-        let old_refs = self.refs.fetch_add(1, Ordering::Relaxed);
+        let old_refs = self.data().refs.fetch_add(1, Ordering::Relaxed);
         debug_assert!(old_refs > 0);
 
         Self {
@@ -223,24 +230,15 @@ impl<A: Alloc> Drop for PathBuf<A> {
     fn drop(&mut self) {
         unsafe {
             let layout = PathData::layout(
-                self.num_verbs  as usize,
-                self.num_points as usize).unwrap();
+                self.data().num_verbs  as usize,
+                self.data().num_points as usize).unwrap();
             self.alloc.free(self.data.cast(), layout);
         }
     }
 }
 
-impl<A: Alloc> core::ops::Deref for PathBuf<A> {
-    type Target = PathData;
 
-    #[inline(always)]
-    fn deref(&self) -> &Self::Target {
-        unsafe { self.data.as_ref() }
-    }
-}
-
-
-pub struct PathData {
+struct PathData {
     refs: AtomicU32,
     aabb: Rect,
     num_verbs:  u32,
@@ -259,25 +257,32 @@ impl PathData {
 }
 
 
-pub type Path<'a> = &'a PathData;
+#[derive(Clone, Copy)]
+pub struct Path<'a> {
+    data: NonNull<PathData>,
+    phantom: PhantomData<&'a ()>,
+}
 
-impl PathData {
+impl<'a> Path<'a> {
+    #[inline(always)]
+    fn data(&self) -> &PathData { unsafe { self.data.as_ref() } }
+
     #[inline(always)]
     pub fn verbs(&self) -> &[Verb] { unsafe {
-        let ptr: *const Verb = cat_next(self, size_of::<Self>());
-        core::slice::from_raw_parts(ptr, self.num_verbs as usize)
+        let ptr: *const Verb = cat_next(self.data.as_ptr(), size_of::<PathData>());
+        core::slice::from_raw_parts(ptr, self.data().num_verbs as usize)
     }}
 
     #[inline(always)]
     pub fn points(&self) -> &[F32x2] { unsafe {
-        let verbs = self.verbs();
-        let ptr: *const F32x2 = cat_next(verbs.as_ptr(), size_of_val(verbs));
-        core::slice::from_raw_parts(ptr, self.num_points as usize)
+        let verbs: *const Verb  = cat_next(self.data.as_ptr(), size_of::<PathData>());
+        let ptr:   *const F32x2 = cat_next(verbs, self.data().num_verbs as usize * size_of::<Verb>());
+        core::slice::from_raw_parts(ptr, self.data().num_points as usize)
     }}
 
     #[inline(always)]
     pub fn aabb(&self) -> Rect {
-        self.aabb
+        self.data().aabb
     }
 }
 
