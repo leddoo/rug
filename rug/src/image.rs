@@ -36,6 +36,12 @@ impl<'a, T: Copy, const MUT: bool> ImgImpl<'a, T, MUT> {
     #[inline(always)]
     pub fn stride(&self) -> usize { self.stride }
 
+    #[inline(always)]
+    pub fn img(&self) -> Img<T> {
+        Img { data:   self.data,   len: self.len, size: self.size,
+              stride: self.stride, phantom: PhantomData }
+    }
+
 
     #[track_caller]
     #[inline(always)]
@@ -57,7 +63,8 @@ impl<'a, T: Copy, const MUT: bool> ImgImpl<'a, T, MUT> {
     }
 }
 
-impl<'a, T: Copy> ImgImpl<'a, T, true> {
+
+impl<'a, T: Copy> ImgMut<'a, T> {
     #[inline(always)]
     pub fn data_mut(&mut self) -> &mut [T] { 
         unsafe { core::slice::from_raw_parts_mut(self.data, self.len) }
@@ -73,6 +80,7 @@ impl<'a, T: Copy> ImgImpl<'a, T, true> {
         }
     }
 }
+
 
 impl<'a, T: Copy, const MUT: bool> core::ops::Index<(usize, usize)> for ImgImpl<'a, T, MUT> {
     type Output = T;
@@ -93,6 +101,16 @@ impl<'a, T: Copy> core::ops::IndexMut<(usize, usize)> for ImgImpl<'a, T, true> {
         &mut self.data_mut()[y*stride + x]
     }
 }
+
+
+impl<'a, T: Copy> Clone for Img<'a, T> {
+    #[inline(always)]
+    fn clone(&self) -> Self {
+        Self { ..*self }
+    }
+}
+
+impl<'a, T: Copy> Copy for Img<'a, T> {}
 
 
 
@@ -248,7 +266,7 @@ impl<T: Copy, A: Alloc> Image<T, A> {
 
 
     #[inline(always)]
-    pub fn view(&self) -> Img<T> {
+    pub fn img(&self) -> Img<T> {
         let len = self.data.len();
         Img {
             data:    self.data.as_ptr() as *mut T, // is only used as `*const T`.
@@ -260,7 +278,7 @@ impl<T: Copy, A: Alloc> Image<T, A> {
     }
 
     #[inline(always)]
-    pub fn view_mut(&mut self) -> ImgMut<T> {
+    pub fn img_mut(&mut self) -> ImgMut<T> {
         let len = self.data.len(); // stacked borrows.
         ImgMut {
             data:    self.data.as_mut_ptr(),

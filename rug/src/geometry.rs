@@ -206,7 +206,7 @@ impl Quad {
 
     // u32 parameter is max_recursion.
     pub fn flatten<F: FnMut(F32x2, F32x2, u32)>
-        (self, f: &mut F, tolerance_sq: f32, max_recursion: u32)
+        (self, tolerance_sq: f32, max_recursion: u32, f: &mut F)
     {
         /* max error occurs for t = 0.5:
             err = length(p1/2 - (p0 + p2)/4)
@@ -219,8 +219,8 @@ impl Quad {
         }
         else {
             let (q1, q2) = self.split(0.5);
-            q1.flatten(f, tolerance_sq, max_recursion - 1);
-            q2.flatten(f, tolerance_sq, max_recursion - 1);
+            q1.flatten(tolerance_sq, max_recursion - 1, f);
+            q2.flatten(tolerance_sq, max_recursion - 1, f);
         }
     }
 
@@ -518,7 +518,7 @@ impl Cubic {
 
     // u32 parameter is remaining recursion budget.
     pub fn flatten<F: FnMut(F32x2, F32x2, u32)>
-        (self, f: &mut F, tolerance_sq: f32, max_recursion: u32)
+        (self, tolerance_sq: f32, max_recursion: u32, f: &mut F)
     {
         // halve tolerance, because we approximate twice.
         let tolerance_sq = tolerance_sq / 4.0;
@@ -527,7 +527,7 @@ impl Cubic {
         let max_recursion = max_recursion / 2;
 
         let mut on_quad = |quad: Quad, recursion_left| {
-            quad.flatten(f, tolerance_sq, max_recursion + recursion_left);
+            quad.flatten(tolerance_sq, max_recursion + recursion_left, f);
         };
 
         self.reduce(&mut on_quad, tolerance_sq, max_recursion);

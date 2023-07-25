@@ -1,6 +1,21 @@
 
+- next steps:
+    - renderer.
+    - strokes.
+    - shapes.
+    - advanced stroking: caps, joins, dashing.
+    - effects.
+    - tiling.
+    - multi-threading.
+    - large path rasterizer.
+
+
+
 - todo: restore usable v1.
-    - h2c?
+    - renderer:
+        - just kinda do it. joink from the old codebase, clean it up a bit.
+        - convert svgs to a sane format.
+        - svg rendering demo.
 
     - maybe use `extend` for path builder point pushes.
     - `Drop` tests for sti vec. truncate does not look right...
@@ -8,25 +23,10 @@
       not really for the renderer, we're sol if that panics due to oom).
 
     - fix image u32/usize nonsense. ~ prob use usize everywhere.
-    - compositing (solid color fill using mask Img).
-    - renderer abstraction.
-
-- stuff:
     - `FixedVec` for segment buffer ~ uninit.
-    - paths.
-    - stroking.
 
-- opt vid:
-    - tiling.
-    - multi-threading.
-    - traditional active list rasterizer.
-
-
-
-- backlog:
-    - dashing.
-    - effects.
-    - a proper api.
-    - multi-threading.
+    - support uninit for image.
+        - users must write using pointer methods.
+        - `render` supports uninit images.
 
 

@@ -4,6 +4,7 @@ use sti::float::F32Ext;
 
 use crate::geometry::*;
 use crate::image::*;
+use crate::path::*;
 
 
 #[derive(Clone, Copy, Debug)]
@@ -14,16 +15,16 @@ pub enum FillRule {
 
 
 // these are absolute and in pixel space.
-pub const ZERO_TOLERANCE:    f32 = 0.001;
-pub const ZERO_TOLERANCE_SQ: f32 = ZERO_TOLERANCE*ZERO_TOLERANCE;
-pub const FLATTEN_TOLERANCE: f32 = 0.1;
-pub const FLATTEN_RECURSION: u32 = 16;
+pub const ZERO_TOLERANCE:       f32 = 0.001;
+pub const ZERO_TOLERANCE_SQ:    f32 = ZERO_TOLERANCE*ZERO_TOLERANCE;
+pub const FLATTEN_TOLERANCE_SQ: f32 = 0.1*0.1;
+pub const FLATTEN_RECURSION:    u32 = 16;
 
 
 const BUFFER_SIZE: usize = 32;
 
 pub struct Rasterizer<'a> {
-    pub flatten_tolerance: f32,
+    pub flatten_tolerance_sq: f32,
     pub flatten_recursion: u32,
     deltas: ImgMut<'a, f32>,
     size: F32x2,
@@ -40,12 +41,12 @@ impl<'a> Rasterizer<'a> {
         let mask_size = size + U32x2::new(2, 1);
         image.resize_and_clear(*mask_size, 0.0);
 
-        let deltas = image.view_mut();
+        let deltas = image.img_mut();
         let deltas_len = deltas.data().len().try_into().unwrap();
 
         let size = size.as_i32().to_f32();
         Rasterizer {
-            flatten_tolerance: FLATTEN_TOLERANCE,
+            flatten_tolerance_sq: FLATTEN_TOLERANCE_SQ,
             flatten_recursion: FLATTEN_RECURSION,
             deltas,
             size,
@@ -77,7 +78,12 @@ impl<'a> Rasterizer<'a> {
     }
 
 
+
     #[inline(always)]
+    pub fn add_line(&mut self, line: Line) {
+        self.add_line_p(line.p0, line.p1)
+    }
+
     pub fn add_line_p(&mut self, p0: F32x2, p1: F32x2) {
         let aabb = Rect::from_points(p0, p1);
         if self.is_invisible(aabb) {
@@ -92,10 +98,82 @@ impl<'a> Rasterizer<'a> {
         }
     }
 
+    
+    pub fn add_quad_tol_rec(&mut self, quad: Quad, tolerance_sq: f32, max_recursion: u32) {
+        if self.is_invisible(quad.aabb()) {
+            return;
+        }
+
+        if self.are_bounded(&[quad.p0, quad.p1, quad.p2]) {
+            quad.flatten(tolerance_sq, max_recursion, &mut |p0, p1, _| {
+                unsafe { self.add_line_bounded(p0, p1) };
+            });
+        }
+        else {
+            quad.flatten(tolerance_sq, max_recursion, &mut |p0, p1, _| {
+                self.add_line_p(p0, p1)
+            });
+        }
+    }
 
     #[inline(always)]
-    pub fn add_line(&mut self, line: Line) {
-        self.add_line_p(line.p0, line.p1)
+    pub fn add_quad(&mut self, quad: Quad) {
+        self.add_quad_tol_rec(
+            quad,
+            self.flatten_tolerance_sq,
+            self.flatten_recursion);
+    }
+
+    #[inline(always)]
+    pub fn add_quad_p(&mut self, p0: F32x2, p1: F32x2, p2: F32x2) {
+        self.add_quad(quad(p0, p1, p2))
+    }
+
+
+    pub fn add_cubic(&mut self, cubic: Cubic) {
+        if self.is_invisible(cubic.aabb()) {
+            return;
+        }
+
+        // @todo: why doesn't this do the bounded check like quad does?
+
+        let tol = self.flatten_tolerance_sq;
+        let rec = self.flatten_recursion;
+        cubic.flatten(tol, rec, &mut |p0, p1, _| {
+            self.add_line_p(p0, p1);
+        });
+    }
+
+    #[inline(always)]
+    pub fn add_cubic_p(&mut self, p0: F32x2, p1: F32x2, p2: F32x2, p3: F32x2) {
+        self.add_cubic(cubic(p0, p1, p2, p3))
+    }
+
+
+    pub fn fill_path(&mut self, path: Path, tfx: &Transform) {
+        use IterEvent::*;
+        let mut begin = None;
+
+        for event in path.iter() {
+            match event {
+                Begin(p0, is_closed) => {
+                    if !is_closed {
+                        begin = Some(p0);
+                    }
+                }
+
+                Line (line)  => { self.add_line (*tfx * line); }
+                Quad (quad)  => { self.add_quad (*tfx * quad); }
+                Cubic(cubic) => { self.add_cubic(*tfx * cubic); }
+
+                End (p1) => {
+                    if let Some(p0) = begin {
+                        self.add_line(*tfx * line(p1, p0));
+                        begin = None;
+                    }
+                }
+            }
+        }
     }
 
 
