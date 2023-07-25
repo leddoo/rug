@@ -13,5 +13,9 @@ fn main() {
     println!("{:?}", path.verbs());
     println!("{:?}", path.points());
     println!("{:?}", path.aabb());
+
+    for e in path.iter() {
+        println!("{:?}", e);
+    }
 }
 

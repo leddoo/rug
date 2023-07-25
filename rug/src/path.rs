@@ -297,9 +297,14 @@ impl<'a> Path<'a> {
     pub fn aabb(&self) -> Rect {
         self.data().aabb
     }
+
+
+    #[inline(always)]
+    pub fn iter(&self) -> Iter { Iter::new(self) }
 }
 
 
+#[derive(Debug)]
 pub enum IterEvent {
     Begin (F32x2, bool), // first-point, closed
     Line  (Line),

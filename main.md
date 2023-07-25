@@ -1,7 +1,5 @@
 
 - todo: restore usable v1.
-    - paths.
-        - iteration.
     - command buffer.
         - with owned paths in arena,
           but built using `PathBuilder<GlobalAlloc>`, cause who cares.
