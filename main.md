@@ -1,7 +1,6 @@
 
 - todo: restore usable v1.
     - paths.
-        - segment -> line.
         - iteration.
     - command buffer.
         - with owned paths in arena,

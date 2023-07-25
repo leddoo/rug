@@ -301,11 +301,11 @@ impl<'a> Path<'a> {
 
 
 pub enum IterEvent {
-    Begin     (F32x2, bool), // first-point, closed
-    Segment   (Segment),
-    Quadratic (Quadratic),
-    Cubic     (Cubic),
-    End       (F32x2), // last-point
+    Begin (F32x2, bool), // first-point, closed
+    Line  (Line),
+    Quad  (Quad),
+    Cubic (Cubic),
+    End   (F32x2), // last-point
 }
 
 pub struct Iter<'p> {
@@ -353,7 +353,7 @@ impl<'p> Iter<'p> {
                 let p1 = self.points[self.point];
                 self.point += 1;
                 self.p0 = p1;
-                IterEvent::Segment(segment(p0, p1))
+                IterEvent::Line(line(p0, p1))
             },
 
             Verb::Quad => {
@@ -362,7 +362,7 @@ impl<'p> Iter<'p> {
                 let p2 = self.points[self.point + 1];
                 self.point += 2;
                 self.p0 = p2;
-                IterEvent::Quadratic(quadratic(p0, p1, p2))
+                IterEvent::Quad(quad(p0, p1, p2))
             },
 
             Verb::Cubic => {

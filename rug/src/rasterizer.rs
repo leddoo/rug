@@ -78,24 +78,24 @@ impl<'a> Rasterizer<'a> {
 
 
     #[inline(always)]
-    pub fn add_segment_p(&mut self, p0: F32x2, p1: F32x2) {
+    pub fn add_line_p(&mut self, p0: F32x2, p1: F32x2) {
         let aabb = Rect::from_points(p0, p1);
         if self.is_invisible(aabb) {
             return;
         }
 
         if self.are_bounded(&[p0, p1]) {
-            unsafe { self.add_segment_bounded(p0, p1); }
+            unsafe { self.add_line_bounded(p0, p1); }
         }
         else {
-            self._add_segment_p_slow_path(p0, p1)
+            self._add_line_p_slow_path(p0, p1)
         }
     }
 
 
     #[inline(always)]
-    pub fn add_segment(&mut self, segment: Segment) {
-        self.add_segment_p(segment.p0, segment.p1)
+    pub fn add_line(&mut self, line: Line) {
+        self.add_line_p(line.p0, line.p1)
     }
 
 
@@ -146,7 +146,7 @@ impl<'a> Rasterizer<'a> {
     }
 
     #[inline(always)]
-    unsafe fn add_segment_bounded(&mut self, p0: F32x2, p1: F32x2) {
+    unsafe fn add_line_bounded(&mut self, p0: F32x2, p1: F32x2) {
         debug_assert!(self.are_bounded(&[p0, p1]));
         //println!("Segment(({}, {}), ({}, {})),", p0.x(), p0.y(), p1.x(), p1.y());
         //println!("Vector(({}, {}), ({}, {})),", p0.x(), p0.y(), p1.x(), p1.y());
@@ -167,7 +167,7 @@ impl<'a> Rasterizer<'a> {
         let batches = (self.buffered + WIDTH-1) / WIDTH;
         assert!(4*batches*core::mem::size_of::<F32v>() <= core::mem::size_of_val(&self.buffer));
 
-        // zero out the extra segments, so we don't rasterize garbage.
+        // zero out the extra lines, so we don't rasterize garbage.
         for i in self.buffered .. batches * WIDTH {
             self.buffer[i] = [F32x2::ZERO; 2]
         }
@@ -360,7 +360,7 @@ impl<'a> Rasterizer<'a> {
     }
 
     #[inline(never)]
-    fn _add_segment_p_slow_path(&mut self, p0: F32x2, p1: F32x2) {
+    fn _add_line_p_slow_path(&mut self, p0: F32x2, p1: F32x2) {
         let (x0, y0) = (p0.x(), p0.y());
         let (x1, y1) = (p1.x(), p1.y());
 
@@ -377,7 +377,7 @@ impl<'a> Rasterizer<'a> {
         let (x0, y0) = clamp(self, x0, y0, dx_over_dy, dy_over_dx, true);
         let (x1, y1) = clamp(self, x1, y1, dx_over_dy, dy_over_dx, false);
 
-        unsafe { self.add_segment_bounded(F32x2::new(x0, y0), F32x2::new(x1, y1)); }
+        unsafe { self.add_line_bounded(F32x2::new(x0, y0), F32x2::new(x1, y1)); }
 
 
         #[inline(always)]

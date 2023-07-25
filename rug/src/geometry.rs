@@ -122,24 +122,24 @@ impl Rect {
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Segment {
+pub struct Line {
     pub p0: F32x2,
     pub p1: F32x2,
 }
 
 #[inline(always)]
-pub fn segment(p0: F32x2, p1: F32x2) -> Segment {
-    Segment { p0, p1 }
+pub fn line(p0: F32x2, p1: F32x2) -> Line {
+    Line { p0, p1 }
 }
 
-impl Segment {
+impl Line {
     #[inline(always)]
     pub fn normal(self, tolerance_sq: f32) -> Option<F32x2> {
         (self.p1 - self.p0).left_normal(tolerance_sq)
     }
 
     #[inline(always)]
-    pub fn offset(self, normal: F32x2, distance: f32) -> Segment {
+    pub fn offset(self, normal: F32x2, distance: f32) -> Line {
         self + distance*normal
     }
 
@@ -151,8 +151,8 @@ impl Segment {
     }
 
     #[inline(always)]
-    pub fn rev(self) -> Segment {
-        segment(self.p1, self.p0)
+    pub fn rev(self) -> Line {
+        line(self.p1, self.p0)
     }
 
     pub fn ggb(self) {
@@ -162,12 +162,12 @@ impl Segment {
     }
 }
 
-impl core::ops::Add<F32x2> for Segment {
-    type Output = Segment;
+impl core::ops::Add<F32x2> for Line {
+    type Output = Line;
 
     #[inline(always)]
-    fn add(self, v: F32x2) -> Segment {
-        segment(
+    fn add(self, v: F32x2) -> Line {
+        line(
             self.p0 + v,
             self.p1 + v)
     }
@@ -176,18 +176,18 @@ impl core::ops::Add<F32x2> for Segment {
 
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Quadratic {
+pub struct Quad {
     pub p0: F32x2,
     pub p1: F32x2,
     pub p2: F32x2,
 }
 
 #[inline(always)]
-pub fn quadratic(p0: F32x2, p1: F32x2, p2: F32x2) -> Quadratic {
-    Quadratic { p0, p1, p2 }
+pub fn quad(p0: F32x2, p1: F32x2, p2: F32x2) -> Quad {
+    Quad { p0, p1, p2 }
 }
 
-impl Quadratic {
+impl Quad {
     #[inline(always)]
     pub fn eval(self, t: f32) -> F32x2 {
         let l10 = self.p0.lerp(self.p1, t);
@@ -196,11 +196,11 @@ impl Quadratic {
     }
 
     #[inline(always)]
-    pub fn split(self, t: f32) -> (Quadratic, Quadratic) {
+    pub fn split(self, t: f32) -> (Quad, Quad) {
         let l10 = self.p0.lerp(self.p1, t);
         let l11 = self.p1.lerp(self.p2, t);
         let l20 = l10.lerp(l11, t);
-        (quadratic(self.p0, l10, l20), quadratic(l20, l11, self.p2))
+        (quad(self.p0, l10, l20), quad(l20, l11, self.p2))
     }
 
 
@@ -231,7 +231,7 @@ impl Quadratic {
          (self.p2 - self.p1).left_normal(tolerance_sq))
     }
 
-    pub fn offset<F: FnMut(Quadratic, u32)>(
+    pub fn offset<F: FnMut(Quad, u32)>(
         self, f: &mut F, normal_start: F32x2, normal_end: F32x2, distance: f32,
         tolerance_sq: f32, max_recursion: u32
     ) {
@@ -246,7 +246,7 @@ impl Quadratic {
 
         let d = F32x2::splat(distance);
         let approx =
-            quadratic(
+            quad(
                 self.p0 + d*n0,
                 self.p1 + d*n1,
                 self.p2 + d*n2);
@@ -282,8 +282,8 @@ impl Quadratic {
     }
 
     #[inline(always)]
-    pub fn rev(self) -> Quadratic {
-        quadratic(self.p2, self.p1, self.p0)
+    pub fn rev(self) -> Quad {
+        quad(self.p2, self.p1, self.p0)
     }
 
     pub fn ggb(self) {
@@ -294,12 +294,12 @@ impl Quadratic {
     }
 }
 
-impl core::ops::Add<F32x2> for Quadratic {
-    type Output = Quadratic;
+impl core::ops::Add<F32x2> for Quad {
+    type Output = Quad;
 
     #[inline(always)]
-    fn add(self, v: F32x2) -> Quadratic {
-        quadratic(
+    fn add(self, v: F32x2) -> Quad {
+        quad(
             self.p0 + v,
             self.p1 + v,
             self.p2 + v)
@@ -462,8 +462,8 @@ impl Cubic {
     */
 
     // mid point approximation.
-    pub fn approx_quad(self) -> Quadratic {
-        quadratic(
+    pub fn approx_quad(self) -> Quad {
+        quad(
             self.p0,
             (0.25*3.0)*(self.p1 + self.p2) - 0.25*(self.p0 + self.p3),
             self.p3)
@@ -471,7 +471,7 @@ impl Cubic {
 
 
     // u32 parameter is remaining recursion budget.
-    pub fn reduce<F: FnMut(Quadratic, u32)>
+    pub fn reduce<F: FnMut(Quad, u32)>
         (self, f: &mut F, tolerance_sq: f32, max_recursion: u32)
     {
         let Cubic {p0, p1, p2, p3} = self;
@@ -526,7 +526,7 @@ impl Cubic {
         // make sure, we have enough splitting left to flatten the quads.
         let max_recursion = max_recursion / 2;
 
-        let mut on_quad = |quad: Quadratic, recursion_left| {
+        let mut on_quad = |quad: Quad, recursion_left| {
             quad.flatten(f, tolerance_sq, max_recursion + recursion_left);
         };
 
@@ -645,21 +645,21 @@ impl core::ops::Mul<F32x2> for Transform {
     }
 }
 
-impl core::ops::Mul<Segment> for Transform {
-    type Output = Segment;
+impl core::ops::Mul<Line> for Transform {
+    type Output = Line;
 
     #[inline(always)]
-    fn mul(self, s: Segment) -> Segment {
-        segment(self*s.p0, self*s.p1)
+    fn mul(self, s: Line) -> Line {
+        line(self*s.p0, self*s.p1)
     }
 }
 
-impl core::ops::Mul<Quadratic> for Transform {
-    type Output = Quadratic;
+impl core::ops::Mul<Quad> for Transform {
+    type Output = Quad;
 
     #[inline(always)]
-    fn mul(self, q: Quadratic) -> Quadratic {
-        quadratic(self*q.p0, self*q.p1, self*q.p2)
+    fn mul(self, q: Quad) -> Quad {
+        quad(self*q.p0, self*q.p1, self*q.p2)
     }
 }
 

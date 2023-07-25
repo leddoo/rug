@@ -7,9 +7,9 @@ fn main() {
     let mut i = image::Image::new([0, 0]);
     let mut r = rasterizer::Rasterizer::new(&mut i, [w, h]);
 
-    r.add_segment_p([1.0, 1.0].into(), [9.0, 1.0].into());
-    r.add_segment_p([9.0, 1.0].into(), [5.0, 4.0].into());
-    r.add_segment_p([5.0, 4.0].into(), [1.0, 1.0].into());
+    r.add_line_p([1.0, 1.0].into(), [9.0, 1.0].into());
+    r.add_line_p([9.0, 1.0].into(), [5.0, 4.0].into());
+    r.add_line_p([5.0, 4.0].into(), [1.0, 1.0].into());
 
     let mask = r.accumulate();
 
