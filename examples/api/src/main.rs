@@ -17,5 +17,18 @@ fn main() {
     for e in path.iter() {
         println!("{:?}", e);
     }
+
+
+    let cmds = cmd::CmdBuf::new(|cb| {
+        let path = cb.create_path(|pb| {
+            pb.move_to([1.0, 1.0].into());
+            pb.line_to([9.0, 1.0].into());
+            pb.line_to([5.0, 4.0].into());
+            pb.close();
+        });
+
+        cb.push(cmd::Cmd::FillPathSolid { path, color: 42 });
+    });
+    println!("{:?}", cmds.cmds());
 }
 

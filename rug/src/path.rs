@@ -303,6 +303,14 @@ impl<'a> Path<'a> {
     pub fn iter(&self) -> Iter { Iter::new(self) }
 }
 
+impl<'a> core::fmt::Debug for Path<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "Path(")?;
+        f.debug_list().entries(self.iter()).finish()?;
+        write!(f, ")")
+    }
+}
+
 
 #[derive(Debug)]
 pub enum IterEvent {

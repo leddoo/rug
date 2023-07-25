@@ -99,7 +99,7 @@ impl<'a, T: Copy> core::ops::IndexMut<(usize, usize)> for ImgImpl<'a, T, true> {
 // @temp
 use core::alloc::Layout;
 
-pub struct Box<T: ?Sized, A: Alloc> {
+pub struct Box<T: ?Sized, A: Alloc = GlobalAlloc> {
     data:  NonNull<T>,
     alloc: A,
 }
