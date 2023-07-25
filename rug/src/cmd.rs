@@ -42,7 +42,7 @@ pub struct CmdBuf {
     #[allow(dead_code)]
     arena: Box<GrowingArena>,
 
-    cmds: Vec<Cmd<'static>, &'static GrowingArena>,
+    cmds: &'static [Cmd<'static>],
 }
 
 impl CmdBuf {
@@ -58,7 +58,7 @@ impl CmdBuf {
 
             f(&mut builder);
 
-            unsafe { core::mem::transmute(builder.cmds) }
+            unsafe { core::mem::transmute(Vec::leak(builder.cmds)) }
         };
 
         CmdBuf { arena, cmds }
