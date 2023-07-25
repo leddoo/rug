@@ -4,7 +4,7 @@ use sti::simd::*;
 
 use core::ptr::NonNull;
 use core::marker::PhantomData;
-use core::mem::{size_of, size_of_val};
+use core::mem::{size_of, ManuallyDrop};
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::geometry::*;
@@ -212,6 +212,14 @@ impl<A: Alloc> PathBuf<A> {
     pub fn path(&self) -> Path {
         Path { data: self.data, phantom: PhantomData }
     }
+
+
+    #[inline(always)]
+    pub fn leak<'a>(self) -> Path<'a>  where A: 'a {
+        let mut this = ManuallyDrop::new(self);
+        unsafe { core::ptr::drop_in_place(&mut this.alloc) }
+        Path { data: this.data, phantom: PhantomData }
+    }
 }
 
 impl<A: Alloc + Clone> Clone for PathBuf<A> {
@@ -229,10 +237,15 @@ impl<A: Alloc + Clone> Clone for PathBuf<A> {
 impl<A: Alloc> Drop for PathBuf<A> {
     fn drop(&mut self) {
         unsafe {
-            let layout = PathData::layout(
-                self.data().num_verbs  as usize,
-                self.data().num_points as usize).unwrap();
-            self.alloc.free(self.data.cast(), layout);
+            let old_refs = self.data().refs.fetch_sub(1, Ordering::Relaxed);
+            debug_assert!(old_refs > 0);
+
+            if old_refs == 1 {
+                let layout = PathData::layout(
+                    self.data().num_verbs  as usize,
+                    self.data().num_points as usize).unwrap();
+                self.alloc.free(self.data.cast(), layout);
+            }
         }
     }
 }

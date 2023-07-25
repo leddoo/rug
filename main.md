@@ -1,7 +1,12 @@
 
 - todo: restore usable v1.
-    - paths & command buffer.
-    - segment -> line.
+    - paths.
+        - segment -> line.
+        - iteration.
+    - command buffer.
+        - with owned paths in arena,
+          but built using `PathBuilder<GlobalAlloc>`, cause who cares.
+          leak the path buffers. give user `Path<'a>`.
 
     - maybe use `extend` for path builder point pushes.
     - `Drop` tests for sti vec. truncate does not look right...
