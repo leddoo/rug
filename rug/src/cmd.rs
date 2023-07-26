@@ -5,7 +5,7 @@ use sti::vec::Vec;
 use crate::path::{Path, PathBuilder};
 
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum Cmd<'a> {
     // @todo: color abstraction.
     FillPathSolid   { path: Path<'a>, color: u32 },
@@ -25,7 +25,7 @@ impl<'a> CmdBufBuilder<'a> {
     pub fn alloc(&self) -> &'a impl Alloc { self.arena }
 
     #[inline(always)]
-    pub fn create_path<F: FnOnce(&mut PathBuilder)>(&mut self, f: F) -> Path<'a> {
+    pub fn build_path<F: FnOnce(&mut PathBuilder)>(&mut self, f: F) -> Path<'a> {
         self.path_builder.clear();
         f(&mut self.path_builder);
         self.path_builder.build_in(self.arena).leak()

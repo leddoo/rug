@@ -116,7 +116,7 @@ impl<A: Alloc> PathBuilder<A> {
         self.aabb.include(p3);
     }
 
-    pub fn close(&mut self) {
+    pub fn close_path(&mut self) {
         assert!(self.in_path);
         // ensure start/end points are equal.
         if *self.points.last().unwrap() != self.begin_point {

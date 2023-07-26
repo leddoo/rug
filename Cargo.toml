@@ -2,6 +2,7 @@
 
 members = [
     "rug",
+    "examples/vg-inputs",
     "examples/raw",
     "examples/api",
 ]

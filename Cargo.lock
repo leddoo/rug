@@ -26,4 +26,11 @@ dependencies = [
 [[package]]
 name = "sti"
 version = "0.1.0"
-source = "git+https://github.com/leddoo/sti#b9d4f0e2f54a9d3c783829427bbbbf9f70514a3b"
+source = "git+https://github.com/leddoo/sti#09d226e736e76e873faefc99b22e616520d957ea"
+
+[[package]]
+name = "vg-inputs"
+version = "0.1.0"
+dependencies = [
+ "rug",
+]

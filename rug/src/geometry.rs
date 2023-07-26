@@ -98,7 +98,7 @@ impl Rect {
     }
 
     #[inline(always)]
-    pub fn round_inclusive_unck(self) -> Rect {
+    pub fn round_inclusive(self) -> Rect {
         rect(
             self.min.floor(),
             self.max.ceil())

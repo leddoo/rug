@@ -5,7 +5,7 @@ fn main() {
     pb.move_to([1.0, 1.0].into());
     pb.line_to([9.0, 1.0].into());
     pb.line_to([5.0, 4.0].into());
-    pb.close();
+    pb.close_path();
 
     let path_buf = pb.build();
     let path = path_buf.path();
@@ -20,11 +20,11 @@ fn main() {
 
 
     let cmds = cmd::CmdBuf::new(|cb| {
-        let path = cb.create_path(|pb| {
+        let path = cb.build_path(|pb| {
             pb.move_to([1.0, 1.0].into());
             pb.line_to([9.0, 1.0].into());
             pb.line_to([5.0, 4.0].into());
-            pb.close();
+            pb.close_path();
         });
 
         cb.push(cmd::Cmd::FillPathSolid { path, color: 42 });
