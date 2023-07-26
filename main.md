@@ -13,9 +13,10 @@
 
 - todo: restore usable v1.
     - renderer:
-        - just kinda do it. joink from the old codebase, clean it up a bit.
-        - convert svgs to a sane format.
-        - svg rendering demo.
+        - copy-expand.
+        - port dynamic svg parser.
+            - is there a non-allocating xml parser?
+        - write tiger as image in example.
 
     - maybe use `extend` for path builder point pushes.
     - `Drop` tests for sti vec. truncate does not look right...

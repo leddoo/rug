@@ -3,7 +3,6 @@ use sti::vec::Vec;
 use sti::simd::*;
 
 use core::marker::PhantomData;
-use core::ptr::NonNull;
 
 
 pub struct ImgImpl<'a, T: Copy, const MUT: bool> {
@@ -107,101 +106,6 @@ impl<'a, T: Copy> Clone for Img<'a, T> {
     #[inline(always)]
     fn clone(&self) -> Self {
         Self { ..*self }
-    }
-}
-
-impl<'a, T: Copy> Copy for Img<'a, T> {}
-
-
-
-// @temp
-use core::alloc::Layout;
-
-pub struct Box<T: ?Sized, A: Alloc = GlobalAlloc> {
-    data:  NonNull<T>,
-    alloc: A,
-}
-
-impl<T, A: Alloc> Box<T, A> {
-    pub fn try_new_in(value: T, alloc: A) -> Option<Self> {
-        let layout = Layout::for_value(&value);
-        let data = alloc.alloc(layout)?;
-        Some(Box { data: data.cast(), alloc })
-    }
-
-    #[track_caller]
-    #[inline(always)]
-    pub fn new_in(value: T, alloc: A) -> Self {
-        Self::try_new_in(value, alloc).unwrap()
-    }
-}
-
-impl<T> Box<T, GlobalAlloc> {
-    #[track_caller]
-    #[inline(always)]
-    pub fn new(value: T) -> Self {
-        Box::new_in(value, GlobalAlloc)
-    }
-}
-
-
-impl<T, A: Alloc> Box<[T], A> {
-    pub fn try_new_slice_in(value: T, len: usize, alloc: A) -> Option<Self>  where T: Copy {
-        let layout = Layout::array::<T>(len).ok()?;
-        let data: NonNull<T> = alloc.alloc(layout)?.cast();
-
-        for i in 0..len {
-            unsafe { data.as_ptr().add(i).write(value) };
-        }
-
-        let data = NonNull::slice_from_raw_parts(data, len);
-        Some(Box { data, alloc })
-    }
-}
-
-impl<T, A: Alloc> Box<[T], A> {
-    #[track_caller]
-    #[inline(always)]
-    pub fn new_slice_in(value: T, len: usize, alloc: A) -> Self  where T: Copy {
-        Box::try_new_slice_in(value, len, alloc).unwrap()
-    }
-}
-
-
-impl<T: ?Sized, A: Alloc> Box<T, A> {
-    #[inline(always)]
-    pub fn as_ptr(&self) -> *const T { self.data.as_ptr() }
-
-    #[inline(always)]
-    pub fn as_mut_ptr(&mut self) -> *mut T { self.data.as_ptr() }
-
-    #[inline(always)]
-    pub fn alloc(&self) -> &A { &self.alloc }
-}
-
-
-impl<T: ?Sized, A: Alloc> core::ops::Deref for Box<T, A> {
-    type Target = T;
-
-    #[inline(always)]
-    fn deref(&self) -> &Self::Target {
-        unsafe { self.data.as_ref() }
-    }
-}
-
-impl<T: ?Sized, A: Alloc> core::ops::DerefMut for Box<T, A> {
-    #[inline(always)]
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { self.data.as_mut() }
-    }
-}
-
-impl<T: ?Sized, A: Alloc> Drop for Box<T, A> {
-    fn drop(&mut self) {
-        unsafe {
-            let layout = Layout::for_value(self.data.as_ref());
-            self.alloc.free(self.data.cast(), layout);
-        }
     }
 }
 
