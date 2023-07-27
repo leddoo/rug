@@ -1,6 +1,8 @@
 use sti::simd::*;
+use sti::float::*;
 
 use crate::geometry::*;
+use crate::color::*;
 use crate::image::*;
 use crate::cmd::*;
 use crate::rasterizer::Rasterizer;
@@ -24,31 +26,74 @@ pub struct RenderParams {
 // right, so this is the function, we'd put in a trait.
 // which means a renderer is a struct, which would enable
 // allocation caching, for example.
-pub fn render(cmds: &[Cmd], params: RenderParams, target: &mut ImgMut<u32>) {
-    let mut render_image = <Image<[F32x4; 4], _>>::new(*target.size());
+pub fn render(cmds: &[Cmd], params: &RenderParams, target: &mut ImgMut<u32>) {
+    let clear = [
+        F32x4::splat(argb_unpack(params.clear)[0]),
+        F32x4::splat(argb_unpack(params.clear)[1]),
+        F32x4::splat(argb_unpack(params.clear)[2]),
+        F32x4::splat(argb_unpack(params.clear)[3]),
+    ];
+    let mut render_image = <Image<[F32x4; 4], _>>::with_clear(*target.size(), clear);
 
     let mut raster_image = Image::new([0, 0]);
+    let clip = Rect { min: F32x2::ZERO, max: target.size().as_i32().to_f32() };
+
+    let tfx = &params.tfx;
 
     for cmd in cmds {
-        match cmd {
+        match *cmd {
             Cmd::FillPathSolid { path, color } => {
-                // aabb bounds check.
-                // ~ rasterizer::rect_for
+                // todo: aabb bounds check.
+                let aabb = tfx.aabb_transform(path.aabb());
 
-                let mut r = Rasterizer::new(&mut raster_image, [0, 0]);
-                r.fill_path(*path, &params.tfx);
+                let (raster_size, raster_origin, blit_offset) =
+                    raster_rect_for(aabb, clip, 4);
+
+                let mut tfx = *tfx;
+                tfx.columns[2] -= raster_origin;
+
+                let mut r = Rasterizer::new(&mut raster_image, *raster_size);
+                r.fill_path(path, &tfx);
                 let mask = r.accumulate();
 
-                //fill_mask_solid(mask.img(), render_image.img_mut());
+                let color = argb_unpack(color);
+
+                fill_mask_solid(&mask.img(), blit_offset, color, &mut render_image.img_mut());
             }
 
             _ => unimplemented!()
         }
     }
+
+    // writeback.
+    target.copy_expand(&render_image.img(), I32x2::ZERO,
+        |c| *abgr_u8x4_pack(c));
 }
 
 
-pub fn fill_mask_solid(mask: Img<f32>, offset: U32x2, color: F32x4, target: &mut ImgMut<[F32x4; 4]>) {
+/// - `clip` must be a valid integer rect with `clip.min >= zero`.
+/// - `align` is the horizontal alignment in pixels (for simd blitting).
+/// - returns `(raster_size, raster_origin, blit_offset)`.
+///     - `raster_size`   is the size of the rasterizer's rect.
+///     - `raster_origin` is the global position of the rasterizer's origin.
+///     - `blit_offset`   is the integer offset from `clip` to the rasterizer's origin.
+pub fn raster_rect_for(rect: Rect, clip: Rect, align: u32) -> (U32x2, F32x2, U32x2) {
+    // compute rasterizer's integer rect in global coordinates.
+    let raster_rect = rect.clamp_to(clip).round_inclusive();
+
+    // pad rasterizer rect to meet alignment requirement.
+    let align = align as f32;
+    let x0 = (raster_rect.min.x() / align).ffloor() * align;
+    let x1 = (raster_rect.max.x() / align).fceil()  * align;
+
+    let raster_size   = F32x2::new(x1 - x0, raster_rect.height()).to_i32_unck().as_u32();
+    let raster_origin = F32x2::new(x0,      raster_rect.min.y());
+    let blit_offset   = (raster_origin - clip.min).to_i32_unck().as_u32();
+    (raster_size, raster_origin, blit_offset)
+}
+
+
+pub fn fill_mask_solid(mask: &Img<f32>, offset: U32x2, color: F32x4, target: &mut ImgMut<[F32x4; 4]>) {
     let n = 4;
 
     let size = U32x2::new(n*target.width(), target.height());

@@ -575,10 +575,19 @@ pub struct Transform {
 }
 
 impl Transform {
-    pub const ID: Transform = Transform::scale(1.0);
+    pub const ID: Transform = Transform::scale1(1.0);
 
     #[inline(always)]
-    pub const fn scale(s: f32) -> Transform {
+    pub const fn scale(s: F32x2) -> Transform {
+        Transform { columns: [
+            F32x2::from_array([s.x(), 0.0  ]),
+            F32x2::from_array([0.0,   s.y()]),
+            F32x2::from_array([0.0,   0.0  ]),
+        ]}
+    }
+
+    #[inline(always)]
+    pub const fn scale1(s: f32) -> Transform {
         Transform { columns: [
             F32x2::from_array([  s, 0.0]),
             F32x2::from_array([0.0,   s]),

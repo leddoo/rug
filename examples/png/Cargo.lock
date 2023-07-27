@@ -3,25 +3,11 @@
 version = 3
 
 [[package]]
-name = "api"
-version = "0.1.0"
-dependencies = [
- "rug",
-]
-
-[[package]]
 name = "png"
 version = "0.1.0"
 dependencies = [
  "rug",
  "vg-inputs",
-]
-
-[[package]]
-name = "raw"
-version = "0.1.0"
-dependencies = [
- "rug",
 ]
 
 [[package]]

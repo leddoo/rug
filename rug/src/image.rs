@@ -5,6 +5,16 @@ use sti::simd::*;
 use core::marker::PhantomData;
 
 
+#[inline(always)]
+unsafe fn slice_to_bytes<T>(slice: &[T]) -> &[u8] {
+    unsafe {
+        core::slice::from_raw_parts(
+            slice.as_ptr() as *const u8,
+            slice.len() * core::mem::size_of::<T>())
+    }
+}
+
+
 pub struct ImgImpl<'a, T: Copy, const MUT: bool> {
     data:    *mut T,
     len:     usize,
@@ -21,6 +31,11 @@ impl<'a, T: Copy, const MUT: bool> ImgImpl<'a, T, MUT> {
     #[inline(always)]
     pub fn data(&self) -> &[T] {
         unsafe { core::slice::from_raw_parts(self.data, self.len) }
+    }
+
+    #[inline(always)]
+    pub fn as_bytes(&self) -> &[u8] {
+        unsafe { slice_to_bytes(self.data()) }
     }
 
     #[inline(always)]
@@ -76,6 +91,43 @@ impl<'a, T: Copy> ImgMut<'a, T> {
         unsafe {
             let ptr = self.data_mut().as_mut_ptr().add(y*self.stride + x) as *mut [T; N];
             return ptr.write_unaligned(vs);
+        }
+    }
+
+    pub fn copy_expand<U: Copy, const N: usize, F: Fn(U) -> [T; N]>
+        (&mut self, src: &Img<U>, to: I32x2, f: F)
+    {
+        let size_x = src.width()  as i32 * N as i32;
+        let size_y = src.height() as i32;
+
+        let begin_x = to.x()           .clamp(0, self.size.x() as i32) as usize;
+        let begin_y = to.y()           .clamp(0, self.size.y() as i32) as usize;
+        let end_x   = (to.x() + size_x).clamp(0, self.size.x() as i32) as usize;
+        let end_y   = (to.y() + size_y).clamp(0, self.size.y() as i32) as usize;
+
+        let w = end_x - begin_x;
+        let h = end_y - begin_y;
+
+        let stride = self.stride;
+        let data = self.data_mut();
+        let start = begin_y*stride + begin_x;
+
+        for dy in 0..h {
+            let base = start + dy*stride;
+
+            for u in 0 .. (w / N) {
+                let c = f(src[(u, dy)]);
+                let i0 = base + u*N;
+                data[i0 .. i0 + N].copy_from_slice(&c);
+            }
+
+            let rem = w % N;
+            if rem > 0 {
+                let u = w / N;
+                let c = f(src[(u, dy)]);
+                let i0 = base + u*N;
+                data[i0 .. i0 + rem].copy_from_slice(&c[0..rem]);
+            }
         }
     }
 }
@@ -167,6 +219,12 @@ impl<T: Copy, A: Alloc> Image<T, A> {
 
     #[inline(always)]
     pub fn data_mut(&mut self) -> &mut [T] { self.data.as_mut() }
+
+
+    #[inline(always)]
+    pub fn as_bytes(&self) -> &[u8] {
+        unsafe { slice_to_bytes(self.data()) }
+    }
 
 
     #[inline(always)]

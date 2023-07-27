@@ -1,0 +1,10 @@
+[package]
+name = "png"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rug = { path = "../../rug" }
+vg-inputs = { path = "../vg-inputs" }
+image = "0.24.6"
+

@@ -13,9 +13,8 @@
 
 - todo: restore usable v1.
     - renderer:
-        - copy-expand.
-        - port dynamic svg parser.
-            - is there a non-allocating xml parser?
+        - spall tracing.
+        - port dynamic svg parser using xmlparser.
         - write tiger as image in example.
 
     - maybe use `extend` for path builder point pushes.

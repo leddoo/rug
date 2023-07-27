@@ -14,13 +14,6 @@ pub fn argb_unpack(v: u32) -> F32x4 {
 }
 
 #[inline(always)]
-pub fn argb_pack_u8s(r: u8, g: u8, b: u8, a: u8) -> u32 {
-    let (r, g, b, a) = (r as u32, g as u32, b as u32, a as u32);
-    a << 24 | r << 16 | g << 8 | b
-}
-
-
-#[inline(always)]
 pub fn argb_u8x4_unpack(v: U32x4) -> [F32x4; 4] {
     let mask = U32x4::splat(0xff);
     let a = (v >> 24) & mask;
@@ -35,6 +28,13 @@ pub fn argb_u8x4_unpack(v: U32x4) -> [F32x4; 4] {
      a.as_i32().to_f32() / scale]
 }
 
+
+#[inline(always)]
+pub fn argb_pack_u8s(r: u8, g: u8, b: u8, a: u8) -> u32 {
+    let (r, g, b, a) = (r as u32, g as u32, b as u32, a as u32);
+    a << 24 | r << 16 | g << 8 | b
+}
+
 #[inline(always)]
 pub unsafe fn argb_u8x4_pack_clamped_255(v: [F32x4; 4]) -> U32x4 {
     let [r, g, b, a] = v;
@@ -47,13 +47,40 @@ pub unsafe fn argb_u8x4_pack_clamped_255(v: [F32x4; 4]) -> U32x4 {
 }
 
 #[inline(always)]
-pub fn argb_u8x4_pack<const N: usize>(v: [F32x4; 4]) -> U32x4 {
+pub fn argb_u8x4_pack(v: [F32x4; 4]) -> U32x4 {
     let offset = F32x4::splat(0.5);
     let scale = F32x4::splat(255.0);
     let min = F32x4::splat(0.0);
     let max = F32x4::splat(255.0);
     let [r, g, b, a] = v;
     unsafe { argb_u8x4_pack_clamped_255([
+        (scale*r + offset).clamp(min, max),
+        (scale*g + offset).clamp(min, max),
+        (scale*b + offset).clamp(min, max),
+        (scale*a + offset).clamp(min, max),
+    ]) }
+}
+
+
+#[inline(always)]
+pub unsafe fn abgr_u8x4_pack_clamped_255(v: [F32x4; 4]) -> U32x4 {
+    let [r, g, b, a] = v;
+
+    let a = a.to_i32_unck() << 24;
+    let b = b.to_i32_unck() << 16;
+    let g = g.to_i32_unck() <<  8;
+    let r = r.to_i32_unck() <<  0;
+    (a | b | g | r).as_u32()
+}
+
+#[inline(always)]
+pub fn abgr_u8x4_pack(v: [F32x4; 4]) -> U32x4 {
+    let offset = F32x4::splat(0.5);
+    let scale = F32x4::splat(255.0);
+    let min = F32x4::splat(0.0);
+    let max = F32x4::splat(255.0);
+    let [r, g, b, a] = v;
+    unsafe { abgr_u8x4_pack_clamped_255([
         (scale*r + offset).clamp(min, max),
         (scale*g + offset).clamp(min, max),
         (scale*b + offset).clamp(min, max),

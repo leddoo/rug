@@ -177,6 +177,7 @@ impl<'a> Rasterizer<'a> {
     }
 
 
+    #[cfg(not(target_arch = "aarch64"))]
     pub fn accumulate(mut self) -> ImgMut<'a, f32> {
         if self.buffered > 0 {
             self.flush();
@@ -199,30 +200,64 @@ impl<'a> Rasterizer<'a> {
         deltas
     }
 
+    #[cfg(target_arch = "aarch64")]
+    pub fn accumulate(mut self) -> ImgMut<'a, f32> {
+        if self.buffered > 0 {
+            self.flush();
+        }
+
+        let w = self.width() as usize;
+        let h = self.height() as usize;
+
+        let mut deltas = self.deltas;
+
+        for y in 0..h {
+
+            let mut c = F32x4::ZERO;
+
+            let aligned_w = w/4*4;
+
+            for x in (0..aligned_w).step_by(4) {
+                let mut d = deltas.read_n(x, y).into();
+
+                //d = d + shift::<4>(d);
+                //d = d + shift::<8>(d);
+                d = d + shift::<12>(d);
+                d = d + shift::<8>(d);
+                c = c + d;
+
+                deltas.write_n(x, y, c.abs().at_most(F32x4::splat(1.0)).as_array());
+
+                c = F32x4::splat(c[3]);
+
+
+                #[inline(always)]
+                fn shift<const AMOUNT: i32>(v: F32x4) -> F32x4 { unsafe {
+                    use core::arch::aarch64::*;
+                    use core::mem::transmute;
+
+                    let v: uint8x16_t = transmute(v);
+                    let z = vdupq_n_u8(0);
+
+                    let r = vextq_u8::<AMOUNT>(z, v);
+                    transmute(r)
+                }}
+            }
+
+            let mut c = c[3];
+            for x in aligned_w..w {
+                c += deltas[(x, y)];
+                deltas[(x, y)] = c.abs().min(1.0);
+            }
+        }
+
+        deltas.truncate([w as u32, h as u32]);
+        deltas
+    }
 }
 
 
 impl<'a> Rasterizer<'a> {
-    /// - clip must be a valid integer rect with clip.min >= zero.
-    /// - returns (raster_size, raster_origin, blit_offset).
-    /// - raster_size is the size of the rasterizer's rect.
-    /// - raster_origin is the global position of the rasterizer's origin.
-    /// - blit_offset is the integer offset from aabb to the rasterizer's origin.
-    fn rect_for(rect: Rect, clip: Rect, align: u32) -> (U32x2, F32x2, U32x2) {
-        // compute rasterizer's integer rect in global coordinates.
-        let raster_rect = rect.clamp_to(clip).round_inclusive_unck();
-
-        // pad rasterizer rect to meet alignment requirement.
-        let align = align as f32;
-        let x0 = (raster_rect.min.x() / align).ffloor() * align;
-        let x1 = (raster_rect.max.x() / align).fceil()  * align;
-
-        let raster_size   = F32x2::new(x1 - x0, raster_rect.height()).to_i32_unck().as_u32();
-        let raster_origin = F32x2::new(x0,      raster_rect.min.y());
-        let blit_offset   = (raster_origin - clip.min).to_i32_unck().as_u32();
-        (raster_size, raster_origin, blit_offset)
-    }
-
     #[inline(always)]
     unsafe fn add_line_bounded(&mut self, p0: F32x2, p1: F32x2) {
         debug_assert!(self.are_bounded(&[p0, p1]));
@@ -380,7 +415,6 @@ impl<'a> Rasterizer<'a> {
                 }
             }
         }
-
     }
 
     unsafe fn add_left_delta_bounded(&mut self, y0: f32, y1: f32) {
