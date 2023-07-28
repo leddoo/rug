@@ -2,20 +2,49 @@ use core::sync::atomic::{AtomicBool, AtomicUsize, AtomicPtr, Ordering};
 use core::cell::{Cell, UnsafeCell};
 use core::mem::{ManuallyDrop, size_of};
 
-use std::sync::Arc;
-use std::sync::mpsc;
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread::JoinHandle;
+use std::fs::{File, OpenOptions};
 
 
 
-pub static CTX: Ctx = Ctx::new();
+// public api.
 
-thread_local!(
-    static THREAD_CTX: ThreadCtx = ThreadCtx::new_timed();
-);
+pub fn init(file_path: &str) -> std::io::Result<()> {
+    // create file, clear, write header.
+    {
+        use std::io::Write;
 
+        let mut f = OpenOptions::new()
+            .write(true).create(true)
+            .open(file_path)?;
+        f.set_len(0)?;
 
-/// force initialization on the current thread.
+        let hz = tsc_freq();
+        let micros = 1_000_000.0 / hz as f64;
+
+        let header = SpallHeader {
+            magic_header:   0x0BADF00D,
+            version:        1,
+            timestamp_unit: micros,
+            must_be_0:      0,
+        };
+        f.write(unsafe {
+            core::slice::from_raw_parts(
+                &header as *const _ as *const u8,
+                core::mem::size_of_val(&header))
+        })?;
+
+        f.sync_all()?;
+    }
+
+    let mut lock = CTX.locked.lock().unwrap();
+    lock.file_path = Some(file_path.to_string());
+
+    Ok(())
+}
+
+/// force buffer initialization on the current thread.
 pub fn touch() {
     THREAD_CTX.with(|cx| {
         // just use the context in some way.
@@ -25,8 +54,37 @@ pub fn touch() {
 }
 
 
+#[macro_export]
+macro_rules! trace_scope {
+    ($name:expr) => {
+        let _trace_scope_ = ::spall::trace_scope_impl($name, "");
+    };
 
-// events
+    ($name:expr , $arg:expr) => {
+        let _trace_scope_ = ::spall::trace_scope_impl($name, $arg);
+    };
+
+    ($name:expr ; $($args:tt)+) => {
+        // @temp!!!!
+        let _trace_scope_ = ::spall::trace_scope_impl($name, &format!($($args)+));
+    };
+}
+
+
+
+
+// state.
+
+static CTX: Ctx = Ctx::new();
+
+thread_local!(
+    static THREAD_CTX: ThreadCtx = ThreadCtx::new_timed();
+);
+
+
+
+// events.
+
 
 #[repr(C, packed)]
 pub struct SpallHeader {
@@ -96,8 +154,10 @@ pub struct PadSkipEvent {
 
 pub const DEFAULT_BUFFER_SIZE: usize = 2*1024*1024;
 
-pub struct Ctx {
-    pub default_buffer_size: AtomicUsize,
+struct Ctx {
+    default_buffer_size: AtomicUsize,
+
+    locked: Mutex<CtxLocked>,
 
     /// whether any event names or args were truncated.
     pub truncated: AtomicBool,
@@ -105,10 +165,18 @@ pub struct Ctx {
     pub dropped: AtomicBool,
 }
 
+struct CtxLocked {
+    file_path: Option<String>,
+}
+
 impl Ctx {
     const fn new() -> Self {
         Self {
             default_buffer_size: AtomicUsize::new(DEFAULT_BUFFER_SIZE),
+
+            locked: Mutex::new(CtxLocked {
+                file_path: None,
+            }),
 
             truncated: AtomicBool::new(false),
             dropped:   AtomicBool::new(false),
@@ -218,6 +286,28 @@ impl ThreadCtx {
     }
 
     fn shutdown(&mut self) {
+        // flush.
+        let this = &self.buffer;
+        let remaining = this.remaining.get();
+        if remaining < this.half_len {
+            // wait until writer is ready.
+            while !this.writer_ptr.load(Ordering::SeqCst).is_null() {
+                println!("waiting for writer");
+                std::thread::yield_now();
+            }
+
+            let old_offset = if this.top_half.get() { this.half_len } else { 0 };
+
+            let data_ptr = unsafe { *this.data_ptr.as_ptr() };
+
+            let old_ptr = unsafe { data_ptr.add(old_offset) };
+
+            // notify writer.
+            this.writer_len.store(this.half_len - remaining, Ordering::SeqCst);
+            this.writer_ptr.store(old_ptr, Ordering::SeqCst);
+            self.sender.send(()).unwrap();
+        }
+
         let sender = unsafe { ManuallyDrop::take(&mut self.sender) };
         let writer = unsafe { ManuallyDrop::take(&mut self.writer) };
 
@@ -282,7 +372,7 @@ impl ThreadCtx {
         }
 
         let trunc_name_len = name.len().min(255);
-        let trunc_args_len = name.len().min(255);
+        let trunc_args_len = args.len().min(255);
 
         let size = BeginEvent::size(trunc_name_len as u8, trunc_args_len as u8);
 
@@ -350,40 +440,37 @@ unsafe impl Sync for Buffer {}
 
 
 fn writer(buffer: Arc<Buffer>, receiver: mpsc::Receiver<()>) {
+    use std::io::Write;
+
+    let mut file: Option<File> = None;
+
     while let Ok(()) = receiver.recv() {
         let ptr = buffer.writer_ptr.load(Ordering::SeqCst);
         if ptr.is_null() {
             continue;
         }
 
-        //let len = buffer.writer_len.load(Ordering::SeqCst);
+        let len = buffer.writer_len.load(Ordering::SeqCst);
 
-        std::thread::sleep(std::time::Duration::from_millis(1));
+        if file.is_none() {
+            let lock = CTX.locked.lock().unwrap();
+
+            if let Some(file_path) = lock.file_path.as_ref() {
+                file = OpenOptions::new()
+                    .append(true)
+                    .open(file_path).ok();
+            }
+        }
+
+        let Some(f) = file.as_mut() else { continue };
+
+        let r = f.write(unsafe { core::slice::from_raw_parts(ptr, len) });
 
         buffer.writer_len.store(0, Ordering::SeqCst);
         buffer.writer_ptr.store(core::ptr::null_mut(), Ordering::SeqCst);
     }
 }
 
-
-
-// macro api.
-
-#[macro_export]
-macro_rules! trace_scope {
-    ($name:expr) => {
-        let _trace_scope_ = ::spall::trace_scope_impl($name, "");
-    };
-
-    ($name:expr , $arg:expr) => {
-        let _trace_scope_ = ::spall::trace_scope_impl($name, $arg);
-    };
-
-    ($name:expr ; $($args:tt)+) => {
-        // @temp!!!!
-        let _trace_scope_ = ::spall::trace_scope_impl($name, &format!($($args)+));
-    };
-}
 
 
 #[inline(always)]

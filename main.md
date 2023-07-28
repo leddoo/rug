@@ -14,16 +14,9 @@
 - todo: restore usable v1.
     - renderer:
         - spall tracing.
-            - write to file.
-                - set path in setup func.
-                - writer checks whether has file in each iter.
-                    - if not, checks global context for path.
-                    - if still no file, drop buffer and record that.
-                - write header.
-                    - setup function.
             - thread local temp buffer for arg formatting.
                 - prob use unsafe to gatekeep access.
-            - record & log drop/trunc events.
+            - record & log drop/trunc/write-fail events.
         - add spall tracing to rug.
         - port dynamic svg parser using xmlparser.
         - write tiger as image in example.

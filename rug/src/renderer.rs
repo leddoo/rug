@@ -27,13 +27,18 @@ pub struct RenderParams {
 // which means a renderer is a struct, which would enable
 // allocation caching, for example.
 pub fn render(cmds: &[Cmd], params: &RenderParams, target: &mut ImgMut<u32>) {
+    spall::trace_scope!("rug::render");
+
     let clear = [
         F32x4::splat(argb_unpack(params.clear)[0]),
         F32x4::splat(argb_unpack(params.clear)[1]),
         F32x4::splat(argb_unpack(params.clear)[2]),
         F32x4::splat(argb_unpack(params.clear)[3]),
     ];
-    let mut render_image = <Image<[F32x4; 4], _>>::with_clear(*target.size(), clear);
+    let mut render_image = {
+        spall::trace_scope!("rug::render::clear");
+        <Image<[F32x4; 4], _>>::with_clear(*target.size(), clear)
+    };
 
     let mut raster_image = Image::new([0, 0]);
     let clip = Rect { min: F32x2::ZERO, max: target.size().as_i32().to_f32() };
@@ -66,8 +71,11 @@ pub fn render(cmds: &[Cmd], params: &RenderParams, target: &mut ImgMut<u32>) {
     }
 
     // writeback.
-    target.copy_expand(&render_image.img(), I32x2::ZERO,
-        |c| *abgr_u8x4_pack(c));
+    {
+        spall::trace_scope!("rug::render::write_back");
+        target.copy_expand(&render_image.img(), I32x2::ZERO,
+            |c| *abgr_u8x4_pack(c));
+    }
 }
 
 
@@ -94,6 +102,8 @@ pub fn raster_rect_for(rect: Rect, clip: Rect, align: u32) -> (U32x2, F32x2, U32
 
 
 pub fn fill_mask_solid(mask: &Img<f32>, offset: U32x2, color: F32x4, target: &mut ImgMut<[F32x4; 4]>) {
+    spall::trace_scope!("rug::fill_mask_solid");
+
     let n = 4;
 
     let size = U32x2::new(n*target.width(), target.height());

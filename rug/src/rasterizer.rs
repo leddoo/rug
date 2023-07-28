@@ -151,6 +151,8 @@ impl<'a> Rasterizer<'a> {
 
 
     pub fn fill_path(&mut self, path: Path, tfx: &Transform) {
+        spall::trace_scope!("rug::raster::fill_path");
+
         use IterEvent::*;
         let mut begin = None;
 
@@ -202,6 +204,8 @@ impl<'a> Rasterizer<'a> {
 
     #[cfg(target_arch = "aarch64")]
     pub fn accumulate(mut self) -> ImgMut<'a, f32> {
+        spall::trace_scope!("rug::raster::accum");
+
         if self.buffered > 0 {
             self.flush();
         }
@@ -273,6 +277,8 @@ impl<'a> Rasterizer<'a> {
     }
 
     fn flush(&mut self) {
+        spall::trace_scope!("rug::raster::flush");
+
         const WIDTH: usize = 4;
         type F32v = F32x4;
         type I32v = I32x4;
