@@ -5,11 +5,35 @@ use rug::image::*;
 use rug::renderer::*;
 
 fn main() {
+    // spall::init()
+
+    spall::touch();
+
     spall::trace_scope!("main");
     {
         spall::trace_scope!("my secret sauce"; "{:?}", 33 + 36);
     }
 
+    let mut work_dt = 0;
+    let t0 = std::time::Instant::now();
+    let mut j = 3;
+    for _ in 0..10_000_000 {
+        spall::trace_scope!("foo");
+        let work_t0 = spall::rdtsc();
+        for _ in 0..100 {
+            if j % 2 == 0 {
+                j = j/2;
+            }
+            else {
+                j = 3*j + 1;
+            }
+        }
+        let work_t1 = spall::rdtsc();
+        work_dt += work_t1 - work_t0;
+    }
+    let dt = t0.elapsed();
+    println!("{:?} - {:?}", dt, dt/10_000_000);
+    println!("{}", work_dt as f64 * 41.0 / 10_000_000.0);
 
     // tiger.
     {

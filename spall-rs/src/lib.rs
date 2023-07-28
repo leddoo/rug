@@ -15,6 +15,16 @@ thread_local!(
 );
 
 
+/// force initialization on the current thread.
+pub fn touch() {
+    THREAD_CTX.with(|cx| {
+        // just use the context in some way.
+        // not sure whether `with` is enough to trigger init.
+        unsafe { (&cx.pid as *const u32).read_volatile(); }
+    });
+}
+
+
 
 // events
 
@@ -87,14 +97,10 @@ pub struct PadSkipEvent {
 pub const DEFAULT_BUFFER_SIZE: usize = 2*1024*1024;
 
 pub struct Ctx {
-    pub buffer_size: AtomicUsize,
-
-    pub drop_on_block: AtomicBool,
+    pub default_buffer_size: AtomicUsize,
 
     /// whether any event names or args were truncated.
     pub truncated: AtomicBool,
-    /// whether any user thread had to wait for a buffer.
-    pub blocked: AtomicBool,
     /// whether any events were dropped.
     pub dropped: AtomicBool,
 }
@@ -102,12 +108,9 @@ pub struct Ctx {
 impl Ctx {
     const fn new() -> Self {
         Self {
-            buffer_size: AtomicUsize::new(DEFAULT_BUFFER_SIZE),
-
-            drop_on_block: AtomicBool::new(false),
+            default_buffer_size: AtomicUsize::new(DEFAULT_BUFFER_SIZE),
 
             truncated: AtomicBool::new(false),
-            blocked:   AtomicBool::new(false),
             dropped:   AtomicBool::new(false),
         }
     }
@@ -162,8 +165,24 @@ struct ThreadCtx {
 
 impl ThreadCtx {
     fn new() -> Self {
-        let buffer_size = CTX.buffer_size.load(Ordering::Relaxed);
-        let buffer = Arc::new(Buffer::new(buffer_size));
+        let buffer = Arc::new({
+            let size = CTX.default_buffer_size.load(Ordering::Relaxed);
+
+            let mut data = UnsafeCell::new(vec![0u8; size].into_boxed_slice());
+            let data_ptr = data.get_mut().as_mut_ptr();
+            Buffer {
+                _data: data,
+                data_ptr: data_ptr.into(),
+                half_len: size/2,
+
+                head:      data_ptr.into(),
+                remaining: (size/2).into(),
+                top_half:  false.into(),
+
+                writer_ptr: AtomicPtr::new(core::ptr::null_mut()),
+                writer_len: 0.into(),
+            }
+        });
 
         let (sender, receiver) = mpsc::channel();
 
@@ -202,30 +221,55 @@ impl ThreadCtx {
         let sender = unsafe { ManuallyDrop::take(&mut self.sender) };
         let writer = unsafe { ManuallyDrop::take(&mut self.writer) };
 
-        println!("prof: dropping sender");
+        // signal quit to writer.
         drop(sender);
 
-        println!("prof: waiting for writer");
+        // wait for writer to terminate.
         writer.join().unwrap();
-        println!("prof: done");
     }
 
 
     #[must_use]
     #[inline(always)]
     unsafe fn write(&self, size: usize) -> Option<*mut u8> {
-        let remaining = self.buffer.remaining.get();
+        let this = &self.buffer;
+
+        let remaining = this.remaining.get();
         if remaining < size {
-            CTX.dropped.store(true, Ordering::Relaxed);
-            return None;
+            // writer still busy?
+            if !this.writer_ptr.load(Ordering::SeqCst).is_null() {
+                println!("!!write dropped!!");
+                CTX.dropped.store(true, Ordering::Relaxed);
+                return None;
+            }
+
+            let old_offset = if this.top_half.get() { this.half_len } else { 0 };
+            let new_offset = if this.top_half.get() { 0 } else { this.half_len };
+
+            let data_ptr = unsafe { *this.data_ptr.as_ptr() };
+
+            let old_ptr = unsafe { data_ptr.add(old_offset) };
+            let new_ptr = unsafe { data_ptr.add(new_offset) };
+
+            // notify writer.
+            this.writer_len.store(this.half_len - remaining, Ordering::SeqCst);
+            this.writer_ptr.store(old_ptr, Ordering::SeqCst);
+            self.sender.send(()).unwrap();
+
+            // swap buffers.
+            unsafe {
+                *this.head.as_ptr() = new_ptr;
+                this.remaining.set(this.half_len);
+                this.top_half.set(!this.top_half.get());
+            }
         }
 
         unsafe {
-            let wp = &mut *self.buffer.write_ptr.as_ptr();
-            let result = *wp;
+            let head = &mut *this.head.as_ptr();
+            let result = *head;
 
-            *wp = wp.add(size);
-            self.buffer.remaining.set(remaining - size);
+            *head = head.add(size);
+            this.remaining.set(this.remaining.get() - size);
 
             return Some(result);
         }
@@ -290,31 +334,35 @@ impl Drop for ThreadCtx {
 
 
 struct Buffer {
-    data: UnsafeCell<Box<[u8]>>,
-    write_ptr: AtomicPtr<u8>,
+    _data: UnsafeCell<Box<[u8]>>,
+    data_ptr: AtomicPtr<u8>,
+    half_len: usize,
+
+    head:      AtomicPtr<u8>,
     remaining: Cell<usize>,
+    top_half:  Cell<bool>,
+
+    writer_ptr: AtomicPtr<u8>,
+    writer_len: AtomicUsize,
 }
 
 unsafe impl Sync for Buffer {}
 
-impl Buffer {
-    fn new(size: usize) -> Self {
-        let mut data = UnsafeCell::new(vec![0u8; size].into_boxed_slice());
-        Self {
-            write_ptr: AtomicPtr::new(data.get_mut().as_mut_ptr()),
-            remaining: (size/2).into(),
-            data,
-        }
-    }
-}
-
 
 fn writer(buffer: Arc<Buffer>, receiver: mpsc::Receiver<()>) {
-    println!("writer: start");
     while let Ok(()) = receiver.recv() {
-        println!("writer: wakeup");
+        let ptr = buffer.writer_ptr.load(Ordering::SeqCst);
+        if ptr.is_null() {
+            continue;
+        }
+
+        //let len = buffer.writer_len.load(Ordering::SeqCst);
+
+        std::thread::sleep(std::time::Duration::from_millis(1));
+
+        buffer.writer_len.store(0, Ordering::SeqCst);
+        buffer.writer_ptr.store(core::ptr::null_mut(), Ordering::SeqCst);
     }
-    println!("writer: quit");
 }
 
 
