@@ -14,6 +14,19 @@
 - todo: restore usable v1.
     - renderer:
         - spall tracing.
+            - handle buffer full.
+                - notify writer.
+                - swap buffers.
+                - block or drop if both full.
+                - simulate write with sleep.
+            - write header.
+                - setup function.
+            - write to file.
+                - set path in setup func.
+                - thread ctx init before setup panics.
+            - thread local temp buffer for arg formatting.
+                - prob use unsafe to gatekeep access.
+        - add spall tracing to rug.
         - port dynamic svg parser using xmlparser.
         - write tiger as image in example.
 

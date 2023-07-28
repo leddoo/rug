@@ -5,6 +5,12 @@ use rug::image::*;
 use rug::renderer::*;
 
 fn main() {
+    spall::trace_scope!("main");
+    {
+        spall::trace_scope!("my secret sauce"; "{:?}", 33 + 36);
+    }
+
+
     // tiger.
     {
         let mut target = Image::new([512, 512]);
@@ -18,7 +24,7 @@ fn main() {
         };
         render(cmds.cmds(), &params, &mut target.img_mut());
 
-        ::image::save_buffer("tiger.png", target.as_bytes(), target.width(), target.height(), ::image::ColorType::Rgba8).unwrap();
+        ::image::save_buffer("target/tiger.png", target.as_bytes(), target.width(), target.height(), ::image::ColorType::Rgba8).unwrap();
 
         if 0==1 {
             let iters = 3000;
