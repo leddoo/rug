@@ -12,14 +12,15 @@
 
 
 - todo: restore usable v1.
-    - renderer:
-        - spall tracing.
-            - thread local temp buffer for arg formatting.
-                - prob use unsafe to gatekeep access.
-            - record & log drop/trunc/write-fail events.
-        - add spall tracing to rug.
-        - port dynamic svg parser using xmlparser.
-        - write tiger as image in example.
+    - strokes.
+    - port dynamic svg parser using xmlparser.
+
+    - spall tracing.
+        - global comp time disable switch.
+        - separate repo.
+        - thread local temp buffer for arg formatting.
+            - prob use unsafe to gatekeep access.
+        - record & log drop/trunc/write-fail events.
 
     - maybe use `extend` for path builder point pushes.
     - `Drop` tests for sti vec. truncate does not look right...

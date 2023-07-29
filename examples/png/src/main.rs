@@ -24,7 +24,7 @@ fn main() {
         ::image::save_buffer("target/tiger.png", target.as_bytes(), target.width(), target.height(), ::image::ColorType::Rgba8).unwrap();
 
         if 0==1 {
-            let iters = 3000;
+            let iters = 500;
             let t0 = std::time::Instant::now();
             for _ in 0..iters {
                 render(cmds.cmds(), &params, &mut target.img_mut());
