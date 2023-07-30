@@ -90,6 +90,7 @@ impl<A: Alloc> PathBuilder<A> {
         self.begin_verb  = self.verbs.len() - 1;
     }
 
+    #[track_caller]
     pub fn line_to(&mut self, p1: F32x2) {
         assert!(self.in_path);
         self.verbs.push(Verb::Line);
@@ -97,6 +98,7 @@ impl<A: Alloc> PathBuilder<A> {
         self.aabb.include(p1);
     }
 
+    #[track_caller]
     pub fn quad_to(&mut self, p1: F32x2, p2: F32x2) {
         assert!(self.in_path);
         self.verbs.push(Verb::Quad);
@@ -106,6 +108,7 @@ impl<A: Alloc> PathBuilder<A> {
         self.aabb.include(p2);
     }
 
+    #[track_caller]
     pub fn cubic_to(&mut self, p1: F32x2, p2: F32x2, p3: F32x2) {
         assert!(self.in_path);
         self.verbs.push(Verb::Cubic);
@@ -117,6 +120,7 @@ impl<A: Alloc> PathBuilder<A> {
         self.aabb.include(p3);
     }
 
+    #[track_caller]
     pub fn close_path(&mut self) {
         assert!(self.in_path);
         // ensure start/end points are equal.
@@ -328,6 +332,10 @@ impl<'a> Path<'a> {
 
     #[inline(always)]
     pub fn iter(&self) -> Iter { Iter::new(self) }
+
+    pub fn ggb(&self) {
+        self.iter().ggb();
+    }
 }
 
 impl<'a> core::fmt::Debug for Path<'a> {
@@ -488,6 +496,19 @@ impl<'p> Iter<'p> {
                 IterEvent::Begin(p0, verb == Verb::EndClosed)
             }
         })
+    }
+
+
+    pub fn ggb(self) {
+        for e in self {
+            match e {
+                IterEvent::Begin(_, _) => (),
+                IterEvent::Line (l) => l.ggb(),
+                IterEvent::Quad (q) => q.ggb(),
+                IterEvent::Cubic(c) => c.ggb(),
+                IterEvent::End(_, _) => (),
+            }
+        }
     }
 }
 

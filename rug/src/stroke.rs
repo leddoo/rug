@@ -6,8 +6,9 @@ use crate::rasterizer::ZERO_TOLERANCE_SQ;
 
 
 // @temp
-pub fn stroke(path: Path, size: f32) {
-    Stroker::stroke(path, size, size);
+pub fn stroke(path: Path, size: f32) -> PathBuf {
+    spall::trace_scope!("rug::stroke");
+    return Stroker::stroke(path, size, size);
 }
 
 
@@ -23,7 +24,7 @@ struct Stroker {
 }
 
 impl Stroker {
-    fn stroke(path: Path, left: f32, right: f32) {
+    fn stroke(path: Path, left: f32, right: f32) -> PathBuf {
         let mut s = Stroker {
             left,
             right: -right,
@@ -34,33 +35,26 @@ impl Stroker {
             pbr: RawPathBuilder::new(),
         };
 
-        // the issue with joins is,
-        // we need to know about both curves.
-        // for miter/round, that is.
-        // so thinking, just push everything raw.
-        // then, in post pass, join, if end points differ.
-
-        // joins: ! do bevel if within like 2*tolerance.
-        // cause otherwise we do some nasty stuff for
-        // discontinuous cubic approximations.
-
         let mut iter = path.iter();
         while let Some(e) = iter.next() {
             match e {
-                IterEvent::Begin(_, _) => {
-                }
+                IterEvent::Begin(_, _) => {}
 
                 IterEvent::Line (line)  => s.line(line),
                 IterEvent::Quad (quad)  => s.quad(quad),
                 IterEvent::Cubic(cubic) => s.cubic(cubic),
 
-                IterEvent::End(_, _) => {
-                    s.dbg();
-                    s.pbl.clear();
-                    s.pbr.clear();
+                IterEvent::End(_, closed) => {
+                    s.build_stroke(closed);
                 }
             }
         }
+        debug_assert!(s.pbl.verbs .is_empty());
+        debug_assert!(s.pbl.points.is_empty());
+        debug_assert!(s.pbr.verbs .is_empty());
+        debug_assert!(s.pbr.points.is_empty());
+
+        return s.pb.build();
     }
 
 
@@ -137,6 +131,139 @@ impl Stroker {
         });
     }
 
+
+    fn build_stroke(&mut self, closed: bool) {
+        debug_assert!(self.pb.in_path() == false);
+
+        let mut prev: Option<F32x2> = None;
+
+        let points = &*self.pbl.points;
+        let mut p = 0;
+        for verb in &self.pbl.verbs {
+            match verb {
+                Verb::Line => {
+                    let p0 = points[p + 0];
+                    let p1 = points[p + 1];
+                    p += 2;
+
+                    if let Some(prev) = prev {
+                        if p0 != prev {
+                            // bevel join.
+                            self.pb.line_to(p0);
+                        }
+                    }
+                    else {
+                        self.pb.move_to(p0);
+                    }
+
+                    self.pb.line_to(p1);
+
+                    prev = Some(p1);
+                }
+
+                Verb::Quad => {
+                    let p0 = points[p + 0];
+                    let p1 = points[p + 1];
+                    let p2 = points[p + 2];
+                    p += 3;
+
+                    if let Some(prev) = prev {
+                        if p0 != prev {
+                            // bevel join.
+                            self.pb.line_to(p0);
+                        }
+                    }
+                    else {
+                        self.pb.move_to(p0);
+                    }
+
+                    self.pb.quad_to(p1, p2);
+
+                    prev = Some(p2);
+                }
+
+                Verb::Cubic => {
+                    // cubics are flattened to quads.
+                    unreachable!()
+                }
+
+                Verb::BeginOpen | Verb::BeginClosed |
+                Verb::EndOpen   | Verb::EndClosed   => unreachable!()
+            }
+        }
+        debug_assert_eq!(p, points.len());
+
+
+        if closed {
+            self.pb.close_path();
+            prev = None;
+        }
+
+
+        let points = &*self.pbr.points;
+        let mut p = points.len();
+        for verb in self.pbr.verbs.iter().rev() {
+            match verb {
+                Verb::Line => {
+                    p -= 2;
+                    let p0 = points[p + 1];
+                    let p1 = points[p + 0];
+
+                    if let Some(prev) = prev {
+                        if p0 != prev {
+                            // bevel join.
+                            self.pb.line_to(p0);
+                        }
+                    }
+                    else {
+                        self.pb.move_to(p0);
+                    }
+
+                    self.pb.line_to(p1);
+
+                    prev = Some(p1);
+                }
+
+                Verb::Quad => {
+                    p -= 3;
+                    let p0 = points[p + 2];
+                    let p1 = points[p + 1];
+                    let p2 = points[p + 0];
+
+                    if let Some(prev) = prev {
+                        if p0 != prev {
+                            // bevel join.
+                            self.pb.line_to(p0);
+                        }
+                    }
+                    else {
+                        self.pb.move_to(p0);
+                    }
+
+                    self.pb.quad_to(p1, p2);
+
+                    prev = Some(p2);
+                }
+
+                Verb::Cubic => {
+                    // cubics are flattened to quads.
+                    unreachable!()
+                }
+
+                Verb::BeginOpen | Verb::BeginClosed |
+                Verb::EndOpen   | Verb::EndClosed   => unreachable!()
+            }
+        }
+        debug_assert_eq!(p, 0);
+
+        self.pb.close_path();
+
+        self.pbl.clear();
+        self.pbr.clear();
+    }
+
+
+    #[allow(dead_code)]
     fn dbg(&self) {
         fn dbg_path(verbs: &[Verb], points: &[F32x2]) {
             let mut p = 0;

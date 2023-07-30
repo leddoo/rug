@@ -13,23 +13,26 @@ fn main() {
         pb.move_to([1.0, 1.0].into());
         pb.line_to([2.0, 1.0].into());
         pb.quad_to([2.0, 2.0].into(), [3.0, 2.0].into());
-        pb.move_to([3.0, 1.0].into());
-        pb.cubic_to([5.0, 1.0].into(), [3.0, 3.0].into(), [5.0, 3.0].into());
+        pb.move_to([4.0, 1.0].into());
+        pb.cubic_to([6.0, 1.0].into(), [4.0, 3.0].into(), [6.0, 3.0].into());
+        pb.move_to([2.0, 3.0].into());
+        pb.line_to([4.0, 3.0].into());
+        pb.line_to([4.0, 4.0].into());
+        pb.line_to([2.0, 4.0].into());
+        pb.close_path();
         let path = pb.build();
         let path = path.path();
 
-        for e in path.iter() {
-            match e {
-                rug::path::IterEvent::Begin(_, _) => (),
-                rug::path::IterEvent::Line (l) => l.ggb(),
-                rug::path::IterEvent::Quad (q) => q.ggb(),
-                rug::path::IterEvent::Cubic(c) => c.ggb(),
-                rug::path::IterEvent::End(_, _) => (),
-            }
-        }
+        path.ggb();
         println!("\n\n");
 
-        rug::stroke::stroke(path, 0.1);
+        let s = rug::stroke::stroke(path, 0.1);
+        s.path().ggb();
+        println!("\n\n");
+
+        let s2 = rug::stroke::stroke(s.path(), 0.2);
+        s2.path().ggb();
+        println!("\n\n");
     }
 
     // tiger.
