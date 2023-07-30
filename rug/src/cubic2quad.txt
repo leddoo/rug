@@ -1,0 +1,285 @@
+approximation of cubics with quadratics:
+
+
+# credit:
+    http://www.caffeineowl.com/graphics/2d/vectorial/cubic2quad01.html
+    link ded :L
+
+
+# 1: left approximation.
+    convert the cubic to a quadratic by dropping the cubic term
+    from the polynomial form, and equating the terms.
+
+    polynomial forms:
+        q3(t) = p0 + 3t(p1 - p0) + 3t^2(p0 + p2 - 2*p1) + t^3(3*(p1 - p2) - (p0 - p3))
+        q2(t) = l0 + 2t(l1 - l0) + t^2(l0 + l2 - 2*l1)
+
+    drop cubic term:
+        q3(t) = p0 + 3t(p1 - p0) + 3t^2(p0 + p2 - 2*p1)
+
+    equate parts:
+                       l0 = p0
+                 2(l1-l0) = 3(p1 - p0)
+           l0 + l2 - 2*l1 = 3(p0 + p2 - 2*p1)
+
+    solve for qs:
+        l0 = p0
+
+        l1 = (3(p1 - p0) + 2*l0)/2
+           = (3*p1 - p0)/2
+
+        l2 = 3(p0 + p2 - 2*p1) + 2*l1 - l0
+           = 3(p0 + p2 - 2*p1) + 2*((3*p1 - p0)/2) - p0
+           = 3*p0 + 3*p2 - 3*2*p1 + 3*p1 - p0 - p0
+           = p0 - 3*p1 + 3*p2
+           = p0 + 3*(p2 - p1)
+
+
+# 2: right approximation.
+    analogous.
+
+        r0 = p3
+        r1 = (3*p2 - p3)/2
+        r2 = p3 + 3*(p1 - p2)
+
+
+# 3: mid point approximation.
+    the left/right approximations are good at the left/right ends
+    of the curve. however, their end points are unconstrained.
+    for our quadratic approximation (q0, q1, q2), we'd like the
+    end points to be equal: q0 = p0, q2 = p3.
+    we can achieve that by combining the left and right approximations:
+        m0 = p0
+        m1 = (l1 + l2)/2
+           = ((3*p1 - p0)/2 + (3*p2 - p3)/2) / 2
+           = ((3*p1 - p0) + (3*p2 - p3)) / 4
+        m2 = p3
+
+# 4: error of the mid point approximation.
+    start by determining the error for a quadtratic (p0, c, p3)
+
+    err(t, c) = quad(p0, c, p3)(t) - q(t)
+
+        // factor out (1-t)*t
+
+        =   (1-t)^2*p0 + 2(1-t)t*c + t^2*p3
+          - (1-t)^3*p0 - 3(1-t)^2t*p1 - 3(1-t)t^2*p2 - t^3*p3
+
+        =   (1-t)*t*(2*c - 3(1-t)p1 - 3t*p2)
+          + (1-t)^2*p0 + t^2*p3
+          - (1-t)^3*p0 - t^3*p3
+
+        =   (1-t)*t*(2*c - 3(1-t)p1 - 3t*p2)
+          + p0*((1-t)^2 - (1-t)^2*(1-t))
+          + p3*(t^2 - t^2*t)
+
+        =   (1-t)*t*(2*c - 3(1-t)p1 - 3t*p2)
+          + p0*((1-t)^2*t)
+          + p3*(t^2 * (1-t))
+
+        =   (1-t)*t*(2*c - 3(1-t)p1 - 3t*p2)
+          + (1-t)*t*((1-t)*p0)
+          + (1-t)*t*(t*p3)
+
+        = (1-t)*t*(2*c - 3(1-t)p1 - 3t*p2 + (1-t)p0 + t*p3)
+
+        // now into polynomial form.
+
+        = (1-t)*t*(2*c - (3*p1 - 3*t*p1) - 3t*p2 + (p0 - t*p0) + t*p3)
+
+        = (1-t)*t*((2*c - 3*p1 + p0) + t*(3*p1 - 3*p2 - p0 + p3))
+
+        = (1-t)*t*((2*c - 3*p1 + p0) + t*(3(p1 - p2) + (p3 - p0)))
+
+
+    error for the mid point approximation.
+
+    err_mid(t)
+
+        = err(t, m1)
+
+        = err(t, ((3*p1 - p0) + (3*p2 - p3)) / 4)
+
+        = (1-t)*t*((2*((3*p1 - p0) + (3*p2 - p3))/4 - 3*p1 + p0)
+          + t*(3(p1 - p2) + (p3 - p0)))
+
+        = (1-t)*t*(( ((3*p1 - p0) + (3*p2 - p3))/2 - 3*p1 + p0 )
+          + t*(3(p1 - p2) + (p3 - p0)))
+
+        = (1-t)*t*(( ((3*p1 - p0) + (3*p2 - p3) - 3*2*p1 + 2*p0)/2 )
+          + t*(3(p1 - p2) + (p3 - p0)))
+
+        = (1-t)*t*((3*p2 - p3 - 3*p1 + p0)/2 + t*(3(p1 - p2) + (p3 - p0)))
+
+        = (1-t)*t*((3(p2 - p1) + (p0 - p3))/2 + t*(3(p1 - p2) + (p3 - p0)))
+
+        = (1-t)*t*(-(3(p1 - p2) + (p3 - p0))/2 + t*(3(p1 - p2) + (p3 - p0)))
+
+        = (1-t)*t*(t - 1/2) * (3(p1 - p2) + (p3 - p0))
+
+
+# 5: find with maximum error.
+
+    let f(t) = err_mid(t) without constant factor
+        = (1-t)*t*(t - 1/2)
+        = t*(t - 1/2) - t*t*(t - 1/2)
+        = t^2 - 1/2*t - t^3 + 1/2t^2
+        = -1/2*t + 3/2t^2 - t^3 
+
+    find extrema of f:
+
+    derivative f'(t)
+        = -1/2 + 3t - 3t^2
+
+    find roots:
+        p = -1
+        q = 1/6
+
+        t01 = -p/2 +- sqrt((p/2)^2 - q)
+        = 1/2 +- sqrt(1/4 - 1/6)
+        = 1/2 +- sqrt(6/24 - 4/24)
+        = 1/2 +- sqrt(1/12)
+        = 1/2 +- 1/sqrt(12)
+
+    plug back into f:
+        // wolfram alpha.
+        f(1/2 +- 1/sqrt(12)) = +- sqrt(3)/36
+
+    max error:
+        sqrt(3)/36 * | 3(p1 - p2) + (p3 - p0) |
+
+
+
+
+@todo: rework adaptive splitting section & remove rest.
+
+# polynomial forms:
+    q3(t) = p0 + 3t(p1 - p0) + 3t^2(p0 + p2 - 2*p1)
+            + t^3(3*(p1 - p2) - (p0 - p3))
+
+    q2(t) = p0 + 2t(p1 - p0) + t^2(p0 + p2 - 2*p1)
+#
+
+# approximate by dropping 3rd degree term & equating:
+    1) p0 = l0
+    2) 3(p1 - p0) = 2(l1 - l0)
+    3) 3(p0 + p2 - 2*p1) = (l0 + l2 - 2*l1)
+
+    2) l1 = ( 3(p1 - p0) + 2*p0 )/2
+          = ( 3*p1 - 3*p0 + 2*p0 )/2
+          = ( 3*p1 - p0 )/2
+
+    3) l2 = 3(p0 + p2 - 2*p1) - p0 + 2*( ( 3*p1 - p0 )/2 )
+          = 3*p0 + 3*p2 - 6*p1 - p0 + 3*p1 - p0
+          = p0 - 3*p1 + 3*p2
+          = p0 + 3(p2 - p1)
+
+    The quadratic (l0, l1, l2) is the left approximation.
+    It is close to the original cubic for t values close to 0.
+
+    cubic (p0, p1, p2, p3) = cubic (p3, p2, p1, p0)
+    Thus, we get the right approximation (r0, r1, r2) with:
+        r0 = p3
+        r1 = ( 3*p2 - p3 )/2
+        r2 = p3 + 3(p1 - p2)
+#
+
+# determining error:
+    We've only dropped the cubic term, so the greater the cubic term,
+    the greater the error.
+    Thus we get the largest error for t=1:
+        left error  = 3*(p1 - p2) - (p0 - p3)
+        right error = 3*(p2 - p1) - (p3 - p0)
+    Because we only care about the magnitude, these are equal.
+    Neither approximation is particularly desirable, because errors at
+    the end points are more noticable in paths consisting of multiple
+    curves.
+#
+
+# error for quad (p0, c, p3):
+    err(t)
+    = (1-t)^2*p0 + 2(1-t)t*c + t^2*p3
+      - (1-t)^3*p0 - 3(1-t)^2t*p1 - 3(1-t)t^2*p2 - t^3*p3
+    = (1-t)t * (2*c - 3(1-t)*p1 - 3t*p2)
+      + (1-t)^2*p0 + t^2*p3
+      - (1-t)^3*p0 - t^3*p3
+    = (1-t)t * (2*c - 3(1-t)*p1 - 3t*p2)
+      + (1-t)^2*p0 - (1-t)^3*p0
+      + t^2*p3 - t^3*p3
+    = (1-t)t * (2*c - 3(1-t)*p1 - 3t*p2)
+      + (1 - (1-t)) * (1-t)^2*p0
+      + (1-t) * t^2*p3
+    = (1-t)t * (2*c - 3(1-t)*p1 - 3t*p2)
+      + (1-t)t * (1-t)*p0
+      + (1-t)t * t*p3
+    = (1-t)t * (2*c - 3(1-t)*p1 - 3t*p2 + (1-t)*p0 + t*p3)
+    = (1-t)t * (2*c - 3*p1 + 3t*p1 - 3t*p2 + p0 - t*p0 + t*p3)
+    = (1-t)t * (2*c - 3*p1 + p0 + t*(3*(p1 - p2) + (p3 - p0)))
+#
+
+# the mid-point approximation:
+    This approximation seems optimal. Though I don't know of a proof.
+    Some observations:
+        - it "groups" with the inner `t*...` term of the error function
+          (see below).
+        - the plot of the error function appears to always be a line.
+          for other control points, the error function usually contains
+          a loop.
+
+    let c = (l1 + r1) / 2
+          = (3(p1 + p2) - (p0 + p3))/4:
+
+        l1 = ( 3*p1 - p0 )/2
+        r1 = ( 3*p2 - p3 )/2
+
+        // huh?
+        (l1+r2)/2 = ((3*p1 - p0)/2 + (3*p2 - p3)/2) / 2
+        = ((3*p1 - p0) + (3*p2 - p3))/4
+
+    err(t)
+    = (1-t)t * ((3(p1 + p2) - (p0 + p3))/2 - 3*p1 + p0 + t*(3*(p1 - p2) + (p3 - p0)))
+    = (1-t)t * (3/2p1 + 3/2p2 - p0/2 - p3/2 - 3*p1 + p0 + t*(3*(p1 - p2) + (p3 - p0)))
+    = (1-t)t * ((3*(p2 - p1) + (p0 - p3))/2 + t*(3*(p1 - p2) + (p3 - p0)))
+    = (1-t)t * ((-3*(p1 - p2) - (p3 - p0))/2 + t*(3*(p1 - p2) + (p3 - p0)))
+    = (1-t)t * (-1/2*(3*(p1 - p2) + (p3 - p0)) + t*(3*(p1 - p2) + (p3 - p0)))
+    = (1-t)t * (t - 1/2) * (3*(p1 - p2) + (p3 - p0))
+
+    find max t:
+        f(t) = (1-t)t * (t - 1/2)
+        = (t - t^2) * (t - 1/2)
+        = t^2 - 1/2*t - t^3 + 1/2*t^2
+
+        f'(t) = -1/2 + 3*t - 3*t^2
+        p = -1
+        q = 1/6
+        t = 1/2 +/- sqrt(1/4 - 1/6)
+          = 1/2 +/- sqrt(6/24 - 4/24)
+          = 1/2 +/- sqrt(2/24)
+          = 1/2 +/- sqrt(1/(4*3))
+          = (1 +/- 1/sqrt(3))/2
+
+        f((1 +/- 1/sqrt(3))/2) = +/- sqrt(3)/36
+
+    max absolute error:
+        sqrt(3)/36 * (3*(p1 - p2) + (p3 - p0)).length()
+#
+
+# adaptive splitting
+    goal: find maximum t for which error of mid-point approximation of
+    first segment is within tolerance.
+
+    control points of first segment (split at t):
+        l0 = p0
+        l1 = (1-t)*p0 + t*p1
+        l2 = (1-t)^2*p0 + 2*(1-t)t*p1 + t^2*p2
+        l3 = (1-t)^3*p0 + 3*(1-t)^2t*p1 + 3*(1-t)t^2*p2 + t^3*p3
+
+    max error is (wolfram alpha):
+        # TODO: explain what's put into wolfram alpha.
+        max_err = t^3 * sqrt(3)/36 * (3(p1 - p2) + (p3 - p0)).length()
+                = t^3 * max-err-of-mid-point-approx-of-original-cubic
+
+    now solve `max_err <= tolerance` to get the split point.
+#
+
+

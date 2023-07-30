@@ -168,7 +168,7 @@ impl<'a> Rasterizer<'a> {
                 Quad (quad)  => { self.add_quad (*tfx * quad); }
                 Cubic(cubic) => { self.add_cubic(*tfx * cubic); }
 
-                End (p1) => {
+                End (p1, _) => {
                     if let Some(p0) = begin {
                         self.add_line(*tfx * line(p1, p0));
                         begin = None;

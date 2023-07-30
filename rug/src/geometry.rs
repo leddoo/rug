@@ -232,8 +232,8 @@ impl Quad {
     }
 
     pub fn offset<F: FnMut(Quad, u32)>(
-        self, f: &mut F, normal_start: F32x2, normal_end: F32x2, distance: f32,
-        tolerance_sq: f32, max_recursion: u32
+        self, normal_start: F32x2, normal_end: F32x2, distance: f32,
+        tolerance_sq: f32, max_recursion: u32, f: &mut F
     ) {
         debug_assert!((self.p2 - self.p0).length_sq() > tolerance_sq);
 
@@ -268,8 +268,8 @@ impl Quad {
         else {
             // TODO: split at point closest to p1?
             let (l, r) = self.split(0.5);
-            l.offset(f, n0, n_mid, distance, tolerance_sq, max_recursion - 1);
-            r.offset(f, n_mid, n2, distance, tolerance_sq, max_recursion - 1);
+            l.offset(n0, n_mid, distance, tolerance_sq, max_recursion - 1, f);
+            r.offset(n_mid, n2, distance, tolerance_sq, max_recursion - 1, f);
         }
     }
 
@@ -332,154 +332,26 @@ impl Cubic {
         (cubic(self.p0, l10, l20, l30), cubic(l30, l21, l12, self.p3))
     }
 
-
-    /* approximation of cubics with quadratics:
-
-        # polynomial forms:
-            q3(t) = p0 + 3t(p1 - p0) + 3t^2(p0 + p2 - 2*p1)
-                    + t^3(3*(p1 - p2) - (p0 - p3))
-
-            q2(t) = p0 + 2t(p1 - p0) + t^2(p0 + p2 - 2*p1)
-        #
-
-        # approximate by dropping 3rd degree term & equating:
-            1) p0 = l0
-            2) 3(p1 - p0) = 2(l1 - l0)
-            3) 3(p0 + p2 - 2*p1) = (l0 + l2 - 2*l1)
-
-            2) l1 = ( 3(p1 - p0) + 2*p0 )/2
-                  = ( 3*p1 - 3*p0 + 2*p0 )/2
-                  = ( 3*p1 - p0 )/2
-
-            3) l2 = 3(p0 + p2 - 2*p1) - p0 + 2*( ( 3*p1 - p0 )/2 )
-                  = 3*p0 + 3*p2 - 6*p1 - p0 + 3*p1 - p0
-                  = p0 - 3*p1 + 3*p2
-                  = p0 + 3(p2 - p1)
-
-            The quadratic (l0, l1, l2) is the left approximation.
-            It is close to the original cubic for t values close to 0.
-
-            cubic (p0, p1, p2, p3) = cubic (p3, p2, p1, p0)
-            Thus, we get the right approximation (r0, r1, r2) with:
-                r0 = p3
-                r1 = ( 3*p2 - p3 )/2
-                r2 = p3 + 3(p1 - p2)
-        #
-
-        # determining error:
-            We've only dropped the cubic term, so the greater the cubic term,
-            the greater the error.
-            Thus we get the largest error for t=1:
-                left error  = 3*(p1 - p2) - (p0 - p3)
-                right error = 3*(p2 - p1) - (p3 - p0)
-            Because we only care about the magnitude, these are equal.
-            Neither approximation is particularly desirable, because errors at
-            the end points are more noticable in paths consisting of multiple
-            curves.
-        #
-
-        # error for quad (p0, c, p3):
-            err(t)
-            = (1-t)^2*p0 + 2(1-t)t*c + t^2*p3
-              - (1-t)^3*p0 - 3(1-t)^2t*p1 - 3(1-t)t^2*p2 - t^3*p3
-            = (1-t)t * (2*c - 3(1-t)*p1 - 3t*p2)
-              + (1-t)^2*p0 + t^2*p3
-              - (1-t)^3*p0 - t^3*p3
-            = (1-t)t * (2*c - 3(1-t)*p1 - 3t*p2)
-              + (1-t)^2*p0 - (1-t)^3*p0
-              + t^2*p3 - t^3*p3
-            = (1-t)t * (2*c - 3(1-t)*p1 - 3t*p2)
-              + (1 - (1-t)) * (1-t)^2*p0
-              + (1-t) * t^2*p3
-            = (1-t)t * (2*c - 3(1-t)*p1 - 3t*p2)
-              + (1-t)t * (1-t)*p0
-              + (1-t)t * t*p3
-            = (1-t)t * (2*c - 3(1-t)*p1 - 3t*p2 + (1-t)*p0 + t*p3)
-            = (1-t)t * (2*c - 3*p1 + 3t*p1 - 3t*p2 + p0 - t*p0 + t*p3)
-            = (1-t)t * (2*c - 3*p1 + p0 + t*(3*(p1 - p2) + (p3 - p0)))
-        #
-
-        # the mid-point approximation:
-            This approximation seems optimal. Though I don't know of a proof.
-            Some observations:
-                - it "groups" with the inner `t*...` term of the error function
-                  (see below).
-                - the plot of the error function appears to always be a line.
-                  for other control points, the error function usually contains
-                  a loop.
-
-            let c = (l1 + r1) / 2
-                  = (3(p1 + p2) - (p0 + p3))/4:
-
-            err(t)
-            = (1-t)t * ((3(p1 + p2) - (p0 + p3))/2 - 3*p1 + p0 + t*(3*(p1 - p2) + (p3 - p0)))
-            = (1-t)t * (3/2p1 + 3/2p2 - p0/2 - p3/2 - 3*p1 + p0 + t*(3*(p1 - p2) + (p3 - p0)))
-            = (1-t)t * ((3*(p2 - p1) + (p0 - p3))/2 + t*(3*(p1 - p2) + (p3 - p0)))
-            = (1-t)t * ((-3*(p1 - p2) - (p3 - p0))/2 + t*(3*(p1 - p2) + (p3 - p0)))
-            = (1-t)t * (-1/2*(3*(p1 - p2) + (p3 - p0)) + t*(3*(p1 - p2) + (p3 - p0)))
-            = (1-t)t * (t - 1/2) * (3*(p1 - p2) + (p3 - p0))
-
-            find max t:
-                f(t) = (1-t)t * (t - 1/2)
-                = (t - t^2) * (t - 1/2)
-                = t^2 - 1/2*t - t^3 + 1/2*t^2
-
-                f'(t) = -1/2 + 3*t - 3*t^2
-                p = -1
-                q = 1/6
-                t = 1/2 +/- sqrt(1/4 - 1/6)
-                  = 1/2 +/- sqrt(6/24 - 4/24)
-                  = 1/2 +/- sqrt(2/24)
-                  = 1/2 +/- sqrt(1/(4*3))
-                  = (1 +/- 1/sqrt(3))/2
-
-                f((1 +/- 1/sqrt(3))/2) = +/- sqrt(3)/36
-
-            max absolute error:
-                sqrt(3)/36 * (3*(p1 - p2) + (p3 - p0)).length()
-        #
-
-        # adaptive splitting
-            goal: find maximum t for which error of mid-point approximation of
-            first segment is within tolerance.
-
-            control points of first segment (split at t):
-                l0 = p0
-                l1 = (1-t)*p0 + t*p1
-                l2 = (1-t)^2*p0 + 2*(1-t)t*p1 + t^2*p2
-                l3 = (1-t)^3*p0 + 3*(1-t)^2t*p1 + 3*(1-t)t^2*p2 + t^3*p3
-
-            max error is (wolfram alpha):
-                # TODO: explain what's put into wolfram alpha.
-                max_err = t^3 * sqrt(3)/36 * (3(p1 - p2) + (p3 - p0)).length()
-                        = t^3 * max-err-of-mid-point-approx-of-original-cubic
-
-            now solve `max_err <= tolerance` to get the split point.
-        #
-
-        # credit:
-            http://www.caffeineowl.com/graphics/2d/vectorial/cubic2quad01.html
-    */
+    // refer to `cubic2quad.txt` for the math behind
+    // the quadratic approximations.
 
     // mid point approximation.
     pub fn approx_quad(self) -> Quad {
         quad(
             self.p0,
-            (0.25*3.0)*(self.p1 + self.p2) - 0.25*(self.p0 + self.p3),
+            0.25*((3.0*self.p1 - self.p0) + (3.0*self.p2 - self.p3)),
             self.p3)
     }
 
 
     // u32 parameter is remaining recursion budget.
     pub fn reduce<F: FnMut(Quad, u32)>
-        (self, f: &mut F, tolerance_sq: f32, max_recursion: u32)
+        (self, tolerance_sq: f32, max_recursion: u32, f: &mut F)
     {
         let Cubic {p0, p1, p2, p3} = self;
 
-        // TODO: this should be squared, i think.
-        // maybe that's why pow 1/12 is better.
-        let scale: f32 = 0.0481125224324688137090957317; // sqrt(3)/36
-        let err_sq = scale * (3.0*(p1 - p2) + (p3 - p0)).length_sq();
+        let scale_sq: f32 = 0.0023148148148148148148148148; // (sqrt(3)/36)^2
+        let err_sq = scale_sq * (3.0*(p1 - p2) + (p3 - p0)).length_sq();
 
         if max_recursion == 0 || err_sq < tolerance_sq {
             f(self.approx_quad(), max_recursion);
@@ -487,8 +359,7 @@ impl Cubic {
         else {
             // solve t^3 * sqrt(err_sq) = sqrt(tolerance_sq)
             //       t^6 = tolerance_sq/ err_sq
-            // experimentally, 1/12 is the best. weird. TODO: investigate.
-            let split = (tolerance_sq / err_sq).powf(1.0/12.0);
+            let split = (tolerance_sq / err_sq).powf(1.0/6.0);
 
             if split < 0.5 {
                 // we can use symmetry to split twice!
@@ -503,15 +374,15 @@ impl Cubic {
                 let (m, r) = r.split(split_2);
 
                 f(l.approx_quad(), max_recursion);
-                m.reduce(f, tolerance_sq, max_recursion - 1);
+                m.reduce(tolerance_sq, max_recursion - 1, f);
                 f(r.approx_quad(), max_recursion);
             }
             else {
                 // split in the middle for better symmetry.
 
                 let (l, r) = self.split(0.5);
-                l.reduce(f, tolerance_sq, max_recursion - 1);
-                r.reduce(f, tolerance_sq, max_recursion - 1);
+                l.reduce(tolerance_sq, max_recursion - 1, f);
+                r.reduce(tolerance_sq, max_recursion - 1, f);
             }
         }
     }
@@ -521,16 +392,14 @@ impl Cubic {
         (self, tolerance_sq: f32, max_recursion: u32, f: &mut F)
     {
         // halve tolerance, because we approximate twice.
-        let tolerance_sq = tolerance_sq / 4.0;
+        let tol_sq = tolerance_sq / 4.0;
 
         // make sure, we have enough splitting left to flatten the quads.
-        let max_recursion = max_recursion / 2;
+        let max_rec = max_recursion / 2;
 
-        let mut on_quad = |quad: Quad, recursion_left| {
-            quad.flatten(tolerance_sq, max_recursion + recursion_left, f);
-        };
-
-        self.reduce(&mut on_quad, tolerance_sq, max_recursion);
+        self.reduce(tol_sq, max_rec, &mut |quad, recursion_left| {
+            quad.flatten(tol_sq, max_rec + recursion_left, f);
+        });
     }
 
 

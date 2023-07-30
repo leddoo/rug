@@ -8,6 +8,30 @@ fn main() {
     spall::init("target/trace.spall").unwrap();
     spall::touch();
 
+    {
+        let mut pb = rug::path::PathBuilder::new();
+        pb.move_to([1.0, 1.0].into());
+        pb.line_to([2.0, 1.0].into());
+        pb.quad_to([2.0, 2.0].into(), [3.0, 2.0].into());
+        pb.move_to([3.0, 1.0].into());
+        pb.cubic_to([5.0, 1.0].into(), [3.0, 3.0].into(), [5.0, 3.0].into());
+        let path = pb.build();
+        let path = path.path();
+
+        for e in path.iter() {
+            match e {
+                rug::path::IterEvent::Begin(_, _) => (),
+                rug::path::IterEvent::Line (l) => l.ggb(),
+                rug::path::IterEvent::Quad (q) => q.ggb(),
+                rug::path::IterEvent::Cubic(c) => c.ggb(),
+                rug::path::IterEvent::End(_, _) => (),
+            }
+        }
+        println!("\n\n");
+
+        rug::stroke::stroke(path, 0.1);
+    }
+
     // tiger.
     {
         let mut target = Image::new([512, 512]);

@@ -48,8 +48,14 @@ pub struct PathBuilder<A: Alloc = GlobalAlloc> {
     begin_verb:  usize,
 }
 
+impl PathBuilder<GlobalAlloc> {
+    pub fn new() -> Self {
+        PathBuilder::new_in(GlobalAlloc)
+    }
+}
+
 impl<A: Alloc> PathBuilder<A> {
-    pub fn new_in(alloc: A) -> Self  where A: Clone{
+    pub fn new_in(alloc: A) -> Self  where A: Clone {
         PathBuilder {
             verbs:       Vec::new_in(alloc.clone()),
             points:      Vec::new_in(alloc),
@@ -59,15 +65,8 @@ impl<A: Alloc> PathBuilder<A> {
             begin_verb:  usize::MAX,
         }
     }
-}
 
-impl PathBuilder<GlobalAlloc> {
-    pub fn new() -> Self {
-        PathBuilder::new_in(GlobalAlloc)
-    }
-}
 
-impl<A: Alloc> PathBuilder<A> {
     pub fn in_path(&self) -> bool {
         self.in_path
     }
@@ -164,6 +163,34 @@ impl<A: Alloc> PathBuilder<A> {
         self.build_in(GlobalAlloc)
     }
 }
+
+
+
+pub struct RawPathBuilder<A: Alloc = GlobalAlloc> {
+    pub verbs:  Vec<Verb,  A>,
+    pub points: Vec<F32x2, A>,
+}
+
+impl RawPathBuilder<GlobalAlloc> {
+    pub fn new() -> Self {
+        RawPathBuilder::new_in(GlobalAlloc)
+    }
+}
+
+impl<A: Alloc> RawPathBuilder<A> {
+    pub fn new_in(alloc: A) -> Self  where A: Clone {
+        RawPathBuilder {
+            verbs:  Vec::new_in(alloc.clone()),
+            points: Vec::new_in(alloc),
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.verbs.clear();
+        self.points.clear();
+    }
+}
+
 
 
 /// Path memory layout:
@@ -314,11 +341,13 @@ impl<'a> core::fmt::Debug for Path<'a> {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum IterEvent {
-    Begin (F32x2, bool), // first-point, closed
+    /// first point, closed.
+    Begin (F32x2, bool),
     Line  (Line),
     Quad  (Quad),
     Cubic (Cubic),
-    End   (F32x2), // last-point
+    /// last point, closed.
+    End   (F32x2, bool),
 }
 
 #[derive(Clone)]
@@ -402,7 +431,7 @@ impl<'p> Iter<'p> {
             Verb::EndOpen | Verb::EndClosed => {
                 let p0 = self.points[self.point];
                 self.point += 1;
-                IterEvent::End(p0)
+                IterEvent::End(p0, verb == Verb::EndClosed)
             }
         })
     }
@@ -426,7 +455,7 @@ impl<'p> Iter<'p> {
         Some(match verb {
             Verb::BeginOpen | Verb::BeginClosed => {
                 let p0 = self.points[self.point];
-                IterEvent::End(p0)
+                IterEvent::End(p0, verb == Verb::BeginClosed)
             },
 
             Verb::Line => {

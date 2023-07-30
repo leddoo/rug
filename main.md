@@ -13,7 +13,10 @@
 
 - todo: restore usable v1.
     - strokes.
+        - implement joins & caps.
     - port dynamic svg parser using xmlparser.
+
+    - `Vec::extend` for path builders.
 
     - spall tracing.
         - global comp time disable switch.
