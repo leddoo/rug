@@ -8,6 +8,11 @@ fn main() {
     spall::init("target/trace.spall").unwrap();
     spall::touch();
 
+    if 1==1 {
+        vg_inputs::parse_svg(vg_inputs::PARIS_SVG);
+        return;
+    }
+
     {
         let mut pb = rug::path::PathBuilder::new();
         pb.move_to([1.0, 1.0].into());

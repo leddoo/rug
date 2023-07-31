@@ -465,6 +465,8 @@ fn writer(buffer: Arc<Buffer>, receiver: mpsc::Receiver<()>) {
         let Some(f) = file.as_mut() else { continue };
 
         let r = f.write(unsafe { core::slice::from_raw_parts(ptr, len) });
+        // @todo: report on ctx.
+        let _ = r;
 
         buffer.writer_len.store(0, Ordering::SeqCst);
         buffer.writer_ptr.store(core::ptr::null_mut(), Ordering::SeqCst);

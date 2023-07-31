@@ -1,9 +1,12 @@
 use rug::*;
-use color::*;
 use cmd::*;
 
-    #[inline(never)]
-    fn build_it(cb: &mut CmdBufBuilder) {
+pub const TIGER_SVG: &str = include_str!("../res/tiger.svg");
+
+pub fn tiger_static() -> CmdBuf {
+    CmdBuf::new(|_| {})
+        /*
+        use color::*;
         {
             let p = cb.build_path(|pb| {
                 pb.move_to([0.0, 0.0].into());
@@ -4045,9 +4048,6 @@ use cmd::*;
             let _ = p;
 
         }
-    }
-#[inline(never)]
-pub fn tiger_static() -> CmdBuf {
-    CmdBuf::new(build_it)
+        */
 }
 

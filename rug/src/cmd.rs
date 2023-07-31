@@ -9,7 +9,7 @@ use crate::path::{Path, PathBuilder};
 pub enum Cmd<'a> {
     // @todo: color abstraction.
     FillPathSolid   { path: Path<'a>, color: u32 },
-    StrokePathSolid { path: Path<'a>, color: u32 },
+    StrokePathSolid { path: Path<'a>, color: u32, width: f32 },
 }
 
 
