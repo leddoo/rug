@@ -35,6 +35,21 @@ pub struct Rasterizer<'a> {
 }
 
 
+/* implementation notes:
+
+    - the rasterizer can't handle very long line segments (> 1000px).
+        the pixel stepping logic uses repeated addition to determine the split points.
+        this is inherently unstable, due to accumulating rounding errors.
+        however, for short line segments, this is a non-issue. (or rather, so far i've
+        not found any counter examples.)
+        this limitation could be solved by splitting long line segments, but this would
+        come at the cost of having to detect these long segments (in an experiment with
+        the paris map, this increased rendering times from 57.7 ms to 59.3 ms).
+        however, with tiling (which puts an upper bound on the segment length) and the
+        "large path rasterizer", this limitation isn't/won't be observable in practice.
+*/
+
+
 impl<'a> Rasterizer<'a> {
     pub fn new<A: Alloc>(image: &'a mut Image<f32, A>, size: [u32; 2]) -> Self {
         spall::trace_scope!("rug::raster::new");

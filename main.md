@@ -12,8 +12,6 @@
 
 
 - todo: restore usable v1.
-    - investigate rasterizer bug.
-
     - command metadata for debugging.
 
     - `Vec::extend` for path builders.
