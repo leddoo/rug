@@ -37,7 +37,9 @@ pub fn render(cmds: &[Cmd], params: &RenderParams, target: &mut ImgMut<u32>) {
     ];
     let mut render_image = {
         spall::trace_scope!("rug::render::clear");
-        <Image<[F32x4; 4], _>>::with_clear(*target.size(), clear)
+        let w = (target.width() + 3) / 4;
+        let h = target.height();
+        <Image<[F32x4; 4], _>>::with_clear([w, h], clear)
     };
 
     let mut raster_image = Image::new([0, 0]);
@@ -55,6 +57,8 @@ pub fn render(cmds: &[Cmd], params: &RenderParams, target: &mut ImgMut<u32>) {
 
                 let (raster_size, raster_origin, blit_offset) =
                     raster_rect_for(aabb, clip, 4);
+
+                if raster_size.eq(U32x2::ZERO).any() { continue }
 
                 let mut tfx = *tfx;
                 tfx.columns[2] -= raster_origin;
@@ -79,6 +83,8 @@ pub fn render(cmds: &[Cmd], params: &RenderParams, target: &mut ImgMut<u32>) {
 
                 let (raster_size, raster_origin, blit_offset) =
                     raster_rect_for(aabb, clip, 4);
+
+                if raster_size.eq(U32x2::ZERO).any() { continue }
 
                 let mut tfx = *tfx;
                 tfx.columns[2] -= raster_origin;
