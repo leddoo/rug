@@ -120,6 +120,13 @@ pub fn parse_svg(svg: &str) -> CmdBuf {
             "path" => {
                 spall::trace_scope!("vg-inputs::parse_svg::path");
 
+                let mut path:           Option<rug::path::Path> = None;
+                let mut fill:           Option<svgtypes::Color> = None;
+                let mut fill_opacity:   Option<f32> = None;
+                let mut stroke:         Option<svgtypes::Color> = None;
+                let mut stroke_width:   Option<f32> = None;
+                let mut stroke_opacity: Option<f32> = None;
+
                 loop {
                     match toker.next().unwrap().unwrap() {
                         Token::Attribute { prefix, local, value, .. } => {
@@ -127,13 +134,7 @@ pub fn parse_svg(svg: &str) -> CmdBuf {
 
                             use core::str::FromStr;
 
-                            let mut fill:           Option<svgtypes::Color> = None;
-                            let mut fill_opacity:   Option<f32> = None;
-                            let mut stroke:         Option<svgtypes::Color> = None;
-                            let mut stroke_width:   Option<f32> = None;
-                            let mut stroke_opacity: Option<f32> = None;
-
-                            let path = cb.build_path(|pb| {
+                            path = Some(cb.build_path(|pb| {
                                 match local.as_str() {
                                     "d" => {
                                         for e in svgtypes::PathParser::from(&*value) {
@@ -193,30 +194,37 @@ pub fn parse_svg(svg: &str) -> CmdBuf {
                                         stroke_opacity = Some(svgtypes::Number::from_str(&*value).unwrap().0 as f32);
                                     }
 
+                                    "id" => {
+                                        //println!("{:?}", &*value);
+                                    }
+
                                     _ => ()
                                 }
-                            });
+                            }));
 
-                            if let Some(color) = fill {
-                                let a = fill_opacity.unwrap_or(1.0);
-                                let a = ((a * (color.alpha as f32 / 255.0)) * 255.0) as u8;
-                                let color = argb_pack_u8s(color.red, color.green, color.blue, a);
-                                cb.push(Cmd::FillPathSolid { path, color });
-                            }
-
-                            if let Some(color) = stroke {
-                                let a = stroke_opacity.unwrap_or(1.0);
-                                let a = ((a * (color.alpha as f32 / 255.0)) * 255.0) as u8;
-                                let color = argb_pack_u8s(color.red, color.green, color.blue, a);
-                                let width = stroke_width.unwrap_or(1.0);
-                                cb.push(Cmd::StrokePathSolid { path, color, width });
-                            }
                         }
 
                         Token::ElementEnd { end: ElementEnd::Empty, span: _ } => break,
 
                         _ => unimplemented!()
                     }
+                }
+
+                let path = path.unwrap();
+
+                if let Some(color) = fill {
+                    let a = fill_opacity.unwrap_or(1.0);
+                    let a = ((a * (color.alpha as f32 / 255.0)) * 255.0) as u8;
+                    let color = argb_pack_u8s(color.red, color.green, color.blue, a);
+                    cb.push(Cmd::FillPathSolid { path, color });
+                }
+
+                if let Some(color) = stroke {
+                    let a = stroke_opacity.unwrap_or(1.0);
+                    let a = ((a * (color.alpha as f32 / 255.0)) * 255.0) as u8;
+                    let color = argb_pack_u8s(color.red, color.green, color.blue, a);
+                    let width = stroke_width.unwrap_or(1.0);
+                    cb.push(Cmd::StrokePathSolid { path, color, width });
                 }
             }
 

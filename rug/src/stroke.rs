@@ -6,9 +6,9 @@ use crate::rasterizer::ZERO_TOLERANCE_SQ;
 
 
 // @temp
-pub fn stroke(path: Path, size: f32) -> PathBuf {
+pub fn stroke(path: Path, width: f32) -> PathBuf {
     spall::trace_scope!("rug::stroke");
-    return Stroker::stroke(path, size, size);
+    return Stroker::stroke(path, width/2.0, width/2.0);
 }
 
 
@@ -256,7 +256,9 @@ impl Stroker {
         }
         debug_assert_eq!(p, 0);
 
-        self.pb.close_path();
+        if self.pbl.verbs.len() > 0 || self.pbr.verbs.len() > 0 {
+            self.pb.close_path();
+        }
 
         self.pbl.clear();
         self.pbr.clear();

@@ -235,8 +235,6 @@ impl Quad {
         self, normal_start: F32x2, normal_end: F32x2, distance: f32,
         tolerance_sq: f32, max_recursion: u32, f: &mut F
     ) {
-        debug_assert!((self.p2 - self.p0).length_sq() > tolerance_sq);
-
         let n0 = normal_start;
         let n2 = normal_end;
 
@@ -251,6 +249,11 @@ impl Quad {
                 self.p1 + d*n1,
                 self.p2 + d*n2);
 
+        if (self.p2 - self.p0).length_sq() <= tolerance_sq {
+            f(approx, max_recursion);
+            return;
+        }
+
         let mid = self.eval(0.5);
         let n_mid = (self.p2 - self.p0).left_normal_unck();
 
@@ -258,11 +261,11 @@ impl Quad {
         let actual   = approx.eval(0.5);
 
         // TODO: keep this? (ensures (p2 - p0) is large enough in the recursive calls)
-        let l_smol = (mid - self.p0).length_sq() <= tolerance_sq;
-        let r_smol = (self.p2 - mid).length_sq() <= tolerance_sq;
+        //let l_smol = (mid - self.p0).length_sq() <= tolerance_sq;
+        //let r_smol = (self.p2 - mid).length_sq() <= tolerance_sq;
 
         let max_dev = actual - expected;
-        if max_recursion == 0 || max_dev.length_sq() <= tolerance_sq || l_smol || r_smol {
+        if max_recursion == 0 || max_dev.length_sq() <= tolerance_sq { //|| l_smol || r_smol {
             f(approx, max_recursion);
         }
         else {

@@ -4,7 +4,8 @@ use cmd::*;
 pub const TIGER_SVG: &str = include_str!("../res/tiger.svg");
 
 pub fn tiger_static() -> CmdBuf {
-    CmdBuf::new(|_| {})
+    CmdBuf::new(|cb| {
+        let _ = cb;
         /*
         use color::*;
         {
@@ -4049,5 +4050,6 @@ pub fn tiger_static() -> CmdBuf {
 
         }
         */
+    })
 }
 

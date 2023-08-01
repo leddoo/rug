@@ -48,6 +48,8 @@ pub fn render(cmds: &[Cmd], params: &RenderParams, target: &mut ImgMut<u32>) {
     for cmd in cmds {
         match *cmd {
             Cmd::FillPathSolid { path, color } => {
+                spall::trace_scope!("rug::render::fill_path_solid");
+
                 // todo: aabb bounds check.
                 let aabb = tfx.aabb_transform(path.aabb());
 
@@ -66,7 +68,29 @@ pub fn render(cmds: &[Cmd], params: &RenderParams, target: &mut ImgMut<u32>) {
                 fill_mask_solid(&mask.img(), blit_offset, color, &mut render_image.img_mut());
             }
 
-            _ => unimplemented!()
+            Cmd::StrokePathSolid { path, color, width } => {
+                spall::trace_scope!("rug::render::stroke_path_solid");
+
+                let stroke = crate::stroke::stroke(path, width);
+                let path = stroke.path();
+
+                // todo: aabb bounds check.
+                let aabb = tfx.aabb_transform(path.aabb());
+
+                let (raster_size, raster_origin, blit_offset) =
+                    raster_rect_for(aabb, clip, 4);
+
+                let mut tfx = *tfx;
+                tfx.columns[2] -= raster_origin;
+
+                let mut r = Rasterizer::new(&mut raster_image, *raster_size);
+                r.fill_path(path, &tfx);
+                let mask = r.accumulate();
+
+                let color = argb_unpack(color);
+
+                fill_mask_solid(&mask.img(), blit_offset, color, &mut render_image.img_mut());
+            }
         }
     }
 

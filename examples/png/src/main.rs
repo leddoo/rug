@@ -8,12 +8,23 @@ fn main() {
     spall::init("target/trace.spall").unwrap();
     spall::touch();
 
+    // paris.
     if 1==1 {
-        vg_inputs::parse_svg(vg_inputs::PARIS_SVG);
-        return;
+        let paris = vg_inputs::parse_svg(vg_inputs::PARIS_SVG);
+
+        let mut target = Image::new([1024, 1024]);
+
+        let params = RenderParams {
+            clear: 0xffffffff,
+            tfx: Transform::scale([1.0, -1.0].into()) *
+                 Transform::translate([0.0, -1024.0].into()),
+        };
+        render(paris.cmds(), &params, &mut target.img_mut());
+
+        ::image::save_buffer("target/paris.png", target.as_bytes(), target.width(), target.height(), ::image::ColorType::Rgba8).unwrap();
     }
 
-    {
+    if 0==1 {
         let mut pb = rug::path::PathBuilder::new();
         pb.move_to([1.0, 1.0].into());
         pb.line_to([2.0, 1.0].into());
@@ -41,17 +52,17 @@ fn main() {
     }
 
     // tiger.
-    {
-        let mut target = Image::new([512, 512]);
+    if 1==1 {
+        let tiger = vg_inputs::parse_svg(vg_inputs::TIGER_SVG);
 
-        let cmds = vg_inputs::tiger_static();
+        let mut target = Image::new([1024, 1024]);
 
         let params = RenderParams {
             clear: 0xffffffff,
-            tfx: Transform::scale([1.0, -1.0].into()) *
+            tfx: Transform::scale([2.0, -2.0].into()) *
                  Transform::translate([0.0, -510.0].into()),
         };
-        render(cmds.cmds(), &params, &mut target.img_mut());
+        render(tiger.cmds(), &params, &mut target.img_mut());
 
         ::image::save_buffer("target/tiger.png", target.as_bytes(), target.width(), target.height(), ::image::ColorType::Rgba8).unwrap();
 
@@ -59,10 +70,10 @@ fn main() {
             let iters = 500;
             let t0 = std::time::Instant::now();
             for _ in 0..iters {
-                render(cmds.cmds(), &params, &mut target.img_mut());
+                render(tiger.cmds(), &params, &mut target.img_mut());
             }
             let dt = t0.elapsed() / iters;
-            println!("{:?}, {:?} per path", dt, dt / cmds.cmds().len() as u32);
+            println!("{:?}, {:?} per path", dt, dt / tiger.cmds().len() as u32);
         }
     }
 }

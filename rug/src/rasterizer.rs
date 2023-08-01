@@ -37,6 +37,8 @@ pub struct Rasterizer<'a> {
 
 impl<'a> Rasterizer<'a> {
     pub fn new<A: Alloc>(image: &'a mut Image<f32, A>, size: [u32; 2]) -> Self {
+        spall::trace_scope!("rug::raster::new");
+
         let size = U32x2::from_array(size);
         let mask_size = size + U32x2::new(2, 1);
         image.resize_and_clear(*mask_size, 0.0);

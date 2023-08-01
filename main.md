@@ -12,8 +12,9 @@
 
 
 - todo: restore usable v1.
-    - stroke render command.
-        - ad-hoc stroking.
+    - investigate rasterizer bug.
+
+    - command metadata for debugging.
 
     - `Vec::extend` for path builders.
 
