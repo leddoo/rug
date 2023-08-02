@@ -1,17 +1,88 @@
 mod tiger;
+use std::collections::HashMap;
+
 pub use tiger::*;
 
 
 pub const PARIS_SVG: &str = include_str!("../res/paris-30k.svg");
+pub const CAR_SVG: &str = include_str!("../res/car.svg");
 
 
-use rug::{cmd::*, color::*};
+use rug::{cmd::*, color::*, geometry::Transform};
 use xmlparser::*;
+use core::str::FromStr;
+
 
 pub fn parse_svg(svg: &str) -> CmdBuf {
     spall::trace_scope!("vg-inputs::parse_svg");
 
-    fn parse(cb: &mut CmdBufBuilder, toker: &mut Tokenizer, at: &Token) -> bool {
+    CmdBuf::new(|cb| {
+        let mut parser = SvgParser {
+            toker: Tokenizer::from(svg),
+            cb,
+            defs: HashMap::new(),
+        };
+        parser.parse_svg();
+    })
+}
+
+
+enum Def {
+    LinearGradient(LinearGradientId),
+}
+
+enum Paint {
+    Solid(u32),
+    LinearGradient(LinearGradientId),
+}
+
+struct SvgParser<'a, 'cb> {
+    toker: Tokenizer<'a>,
+    cb: &'a mut CmdBufBuilder<'cb>,
+    defs: HashMap<&'a str, Def>,
+}
+
+impl<'a, 'cb> SvgParser<'a, 'cb> {
+    fn parse_svg(&mut self) {
+        spall::trace_scope!("vg-inputs::parse_svg::svg");
+
+        // find `<svg>`
+        loop {
+            let at = self.toker.next().unwrap().unwrap();
+            match at {
+                Token::ElementStart { prefix, local, span: _ } => {
+                    assert!(prefix.is_empty());
+                    assert_eq!(local.as_str(), "svg");
+                    break;
+                }
+
+                // ignored.
+                Token::Declaration {..} |
+                Token::ProcessingInstruction {..} |
+                Token::Comment {..} |
+                Token::EntityDeclaration {..} |
+                Token::Text {..} |
+                Token::Cdata {..} => (),
+
+                // not sure.
+                Token::DtdStart {..} |
+                Token::EmptyDtd {..} |
+                Token::DtdEnd {..} => unimplemented!(),
+
+                // errors.
+                Token::Attribute {..} |
+                Token::ElementEnd {..} => unimplemented!(),
+            }
+        }
+
+        if self.skip_attrs() {
+            self.visit_children(|this, at| this.parse_element(at));
+        }
+    }
+
+    fn parse_element(&mut self, at: &Token) {
+        spall::trace_scope!("vg-inputs::parse_svg::element");
+
         let kind = match at {
             Token::ElementStart { prefix, local, span: _ } => {
                 assert!(prefix.is_empty());
@@ -24,7 +95,7 @@ pub fn parse_svg(svg: &str) -> CmdBuf {
             Token::Comment {..} |
             Token::EntityDeclaration {..} |
             Token::Text {..} |
-            Token::Cdata {..} => return true,
+            Token::Cdata {..} => return,
 
             // not sure.
             Token::DtdStart {..} |
@@ -36,107 +107,39 @@ pub fn parse_svg(svg: &str) -> CmdBuf {
             Token::ElementEnd {..} => unimplemented!(),
         };
 
-        fn skip_attrs(toker: &mut Tokenizer) {
-            loop {
-                match toker.next().unwrap().unwrap() {
-                    Token::Attribute {..} => (),
-                    Token::ElementEnd { end: ElementEnd::Open, span: _ } => break,
-                    _ => unimplemented!()
-                }
-            }
-        }
-
-        fn visit_children(cb: &mut CmdBufBuilder, toker: &mut Tokenizer) {
-            loop {
-                let at = toker.next().unwrap().unwrap();
-                if let Token::ElementEnd { end: ElementEnd::Close(_, _), span: _ } = at {
-                    break;
-                }
-                parse(cb, toker, &at);
-            }
-        }
-
-        fn skip_children(toker: &mut Tokenizer) {
-            let mut depth = 0;
-            loop {
-                let at = toker.next().unwrap().unwrap();
-                match at {
-                    Token::ElementStart {..} => {
-                        depth += 1;
-                    }
-
-                    Token::ElementEnd { end, .. } => {
-                        match end {
-                            ElementEnd::Open => {
-                                assert!(depth > 0);
-                            }
-
-                            ElementEnd::Close(_, _) => {
-                                if depth == 0 {
-                                    break;
-                                }
-                            }
-
-                            ElementEnd::Empty => {}
-                        }
-
-                        depth -= 1;
-                    }
-
-                    Token::Declaration {..} |
-                    Token::ProcessingInstruction {..} |
-                    Token::Comment {..} |
-                    Token::EntityDeclaration {..} |
-                    Token::Attribute {..} |
-                    Token::Text {..} |
-                    Token::Cdata {..} => (),
-
-                    Token::DtdStart {..} |
-                    Token::EmptyDtd {..} |
-                    Token::DtdEnd {..} => unimplemented!()
-                }
-            }
-        }
-
         match kind {
-            "svg" => {
-                spall::trace_scope!("vg-inputs::parse_svg::svg");
-                skip_attrs(toker);
-                visit_children(cb, toker);
-                return false;
-            }
-
             "defs" => {
-                skip_attrs(toker);
-                skip_children(toker);
+                if self.skip_attrs() {
+                    self.visit_children(|this, at| this.parse_def(at));
+                }
             }
 
             "g" => {
-                spall::trace_scope!("vg-inputs::parse_svg::g");
-                skip_attrs(toker);
-                visit_children(cb, toker);
+                if self.skip_attrs() {
+                    self.visit_children(|this, at| this.parse_element(at));
+                }
             }
 
             "path" => {
                 spall::trace_scope!("vg-inputs::parse_svg::path");
 
                 let mut path:           Option<rug::path::Path> = None;
-                let mut fill:           Option<svgtypes::Color> = None;
+                let mut fill:           Option<Paint> = None;
                 let mut fill_opacity:   Option<f32> = None;
-                let mut stroke:         Option<svgtypes::Color> = None;
+                let mut stroke:         Option<Paint> = None;
                 let mut stroke_width:   Option<f32> = None;
                 let mut stroke_opacity: Option<f32> = None;
 
                 loop {
-                    match toker.next().unwrap().unwrap() {
+                    match self.toker.next().unwrap().unwrap() {
                         Token::Attribute { prefix, local, value, .. } => {
                             if !prefix.is_empty() { continue; }
 
-                            use core::str::FromStr;
-
-                            path = Some(cb.build_path(|pb| {
+                            path = Some(self.cb.build_path(|pb| {
                                 match local.as_str() {
                                     "d" => {
+                                        let mut error = false;
+
                                         for e in svgtypes::PathParser::from(&*value) {
                                             use svgtypes::PathSegment::*;
                                             match e.unwrap() {
@@ -160,19 +163,47 @@ pub fn parse_svg(svg: &str) -> CmdBuf {
                                                     pb.cubic_to([x1 as f32, y1 as f32].into(), [x2 as f32, y2 as f32].into(), [x as f32, y as f32].into());
                                                 }
 
-                                                ClosePath { abs } => {
-                                                    assert!(abs);
+                                                ClosePath { abs: _ } => {
                                                     pb.close_path();
                                                 }
 
-                                                _ => unimplemented!()
+                                                e => {
+                                                    println!("unsupported path cmd {:?}", e);
+                                                    error = true;
+                                                }
                                             }
+                                        }
+
+                                        if error {
+                                            pb.clear();
                                         }
                                     }
 
                                     "fill" => {
-                                        if &*value != "none" {
-                                            fill = Some(svgtypes::Color::from_str(&*value).unwrap());
+                                        let paint = svgtypes::Paint::from_str(&*value).unwrap();
+                                        match paint {
+                                            svgtypes::Paint::None => (),
+
+                                            svgtypes::Paint::Color(c) => {
+                                                fill = Some(Paint::Solid(argb_pack_u8s(c.red, c.green, c.blue, c.alpha)));
+                                            }
+
+                                            svgtypes::Paint::FuncIRI(uri, _) => {
+                                                if let Some(def) = self.defs.get(uri) {
+                                                    match *def {
+                                                        Def::LinearGradient(g) => {
+                                                            fill = Some(Paint::LinearGradient(g));
+                                                        }
+                                                    }
+                                                }
+                                                else {
+                                                    println!("unknown fill {:?}", uri);
+                                                }
+                                            }
+
+                                            _ => {
+                                                println!("unknown paint {:?}", paint);
+                                            }
                                         }
                                     }
 
@@ -181,8 +212,21 @@ pub fn parse_svg(svg: &str) -> CmdBuf {
                                     }
 
                                     "stroke" => {
-                                        if &*value != "none" {
-                                            stroke = Some(svgtypes::Color::from_str(&*value).unwrap());
+                                        let paint = svgtypes::Paint::from_str(&*value).unwrap();
+                                        match paint {
+                                            svgtypes::Paint::None => (),
+
+                                            svgtypes::Paint::Color(c) => {
+                                                stroke = Some(Paint::Solid(argb_pack_u8s(c.red, c.green, c.blue, c.alpha)));
+                                            }
+
+                                            svgtypes::Paint::FuncIRI(uri, fallback) => {
+                                                println!("todo: stroke uri {:?}/{:?}", uri, fallback);
+                                            }
+
+                                            _ => {
+                                                println!("unknown paint {:?}", paint);
+                                            }
                                         }
                                     }
 
@@ -212,42 +256,298 @@ pub fn parse_svg(svg: &str) -> CmdBuf {
 
                 let path = path.unwrap();
 
-                if let Some(color) = fill {
-                    let a = fill_opacity.unwrap_or(1.0);
-                    let a = ((a * (color.alpha as f32 / 255.0)) * 255.0) as u8;
-                    let color = argb_pack_u8s(color.red, color.green, color.blue, a);
-                    cb.push(Cmd::FillPathSolid { path, color });
+                if let Some(paint) = fill {
+                    let opacity = fill_opacity.unwrap_or(1.0);
+                    match paint {
+                        Paint::Solid(color) => {
+                            let [r, g, b, a] = *argb_unpack(color);
+                            let color = argb_pack([r, g, b, a*opacity].into());
+                            self.cb.push(Cmd::FillPathSolid { path, color });
+                        }
+
+                        Paint::LinearGradient(gradient) => {
+                            self.cb.push(Cmd::FillPathLinearGradient { path, gradient, opacity });
+                        }
+                    }
                 }
 
-                if let Some(color) = stroke {
-                    let a = stroke_opacity.unwrap_or(1.0);
-                    let a = ((a * (color.alpha as f32 / 255.0)) * 255.0) as u8;
-                    let color = argb_pack_u8s(color.red, color.green, color.blue, a);
+                if let Some(paint) = stroke {
+                    let opacity = stroke_opacity.unwrap_or(1.0);
                     let width = stroke_width.unwrap_or(1.0);
-                    cb.push(Cmd::StrokePathSolid { path, color, width });
+                    match paint {
+                        Paint::Solid(color) => {
+                            let [r, g, b, a] = *argb_unpack(color);
+                            let color = argb_pack([r, g, b, a*opacity].into());
+                            self.cb.push(Cmd::StrokePathSolid { path, color, width });
+                        }
+
+                        Paint::LinearGradient(_) => {
+                            unimplemented!()
+                        }
+                    }
                 }
             }
 
             _ => {
                 println!("unsupported element: {:?}", kind);
-                skip_attrs(toker);
-                skip_children(toker);
+                if self.skip_attrs() {
+                    self.skip_children();
+                }
             }
         }
-
-        return true;
     }
 
-    CmdBuf::new(|cb| {
-        let mut toker = Tokenizer::from(svg);
-        loop {
-            let at = toker.next().unwrap().unwrap();
-            if !parse(cb, &mut toker, &at) {
-                break;
+    fn parse_def(&mut self, at: &Token) {
+        spall::trace_scope!("vg-inputs::parse_svg::def");
+
+        let kind = match at {
+            Token::ElementStart { prefix, local, span: _ } => {
+                assert!(prefix.is_empty());
+                local.as_str()
+            }
+
+            // ignored.
+            Token::Declaration {..} |
+            Token::ProcessingInstruction {..} |
+            Token::Comment {..} |
+            Token::EntityDeclaration {..} |
+            Token::Text {..} |
+            Token::Cdata {..} => return,
+
+            // not sure.
+            Token::DtdStart {..} |
+            Token::EmptyDtd {..} |
+            Token::DtdEnd {..} => unimplemented!(),
+
+            // errors.
+            Token::Attribute {..} |
+            Token::ElementEnd {..} => unimplemented!(),
+        };
+
+        match kind {
+            "linearGradient" => {
+                let mut id: Option<&'a str> = None;
+                let mut x0 = 0.0;
+                let mut y0 = 0.0;
+                let mut x1 = 1.0;
+                let mut y1 = 1.0;
+                let mut spread = SpreadMethod::Pad;
+                let mut units = GradientUnits::Relative;
+                let mut tfx = Transform::ID;
+
+                let children = loop {
+                    match self.toker.next().unwrap().unwrap() {
+                        Token::Attribute { prefix, local, value, .. } => {
+                            if !prefix.is_empty() { continue; }
+
+                            match &*local {
+                                "id" => {
+                                    id = Some(value.as_str());
+                                }
+
+                                "x1" => x0 = svgtypes::Number::from_str(&*value).unwrap().0 as f32,
+                                "y1" => y0 = svgtypes::Number::from_str(&*value).unwrap().0 as f32,
+                                "x2" => x1 = svgtypes::Number::from_str(&*value).unwrap().0 as f32,
+                                "y2" => y1 = svgtypes::Number::from_str(&*value).unwrap().0 as f32,
+
+                                "spreadMethod" => {
+                                    match value.as_str() {
+                                        "pad"     => spread = SpreadMethod::Pad,
+                                        "reflect" => spread = SpreadMethod::Reflect,
+                                        "repeat"  => spread = SpreadMethod::Repeat,
+                                        _ => unreachable!()
+                                    }
+                                }
+
+                                "gradientUnits" => {
+                                    match value.as_str() {
+                                        "userSpaceOnUse"    => units = GradientUnits::Absolute,
+                                        "objectBoundingBox" => units = GradientUnits::Relative,
+                                        _ => unreachable!()
+                                    }
+                                }
+
+                                "gradientTransform" => {
+                                    let t = svgtypes::Transform::from_str(&*value).unwrap();
+                                    tfx = Transform { columns: [
+                                        [t.a as f32, t.b as f32].into(),
+                                        [t.c as f32, t.d as f32].into(),
+                                        [t.e as f32, t.f as f32].into(),
+                                    ]};
+                                }
+
+                                _ => {
+                                    println!("unknown linear gradient attr {:?}", local);
+                                }
+                            }
+                        }
+
+                        Token::ElementEnd { end: ElementEnd::Empty, span: _ } => break false,
+                        Token::ElementEnd { end: ElementEnd::Open, span: _ } => break true,
+
+                        _ => unimplemented!()
+                    }
+                };
+
+                if children {
+                    let stops = self.parse_gradient_stops();
+
+                    if let Some(name) = id {
+                        let id = self.cb.push_linear_gradient(LinearGradient {
+                            p0: [x0, y0].into(),
+                            p1: [x1, y1].into(),
+                            spread,
+                            units,
+                            tfx,
+                            stops,
+                        });
+                        self.defs.insert(name, Def::LinearGradient(id));
+                    }
+                }
+            }
+
+            _ => {
+                println!("unknown def {:?}", kind);
+                if self.skip_attrs() {
+                    self.skip_children();
+                }
             }
         }
-        assert!(toker.next().is_none());
-    })
-}
+    }
 
+    fn parse_gradient_stops(&mut self) -> &'cb [GradientStop] {
+        self.cb.build_gradient_stops(|sb| {
+            loop {
+                let at = self.toker.next().unwrap().unwrap();
+                match at {
+                    Token::ElementStart { prefix, local, span: _ } => {
+                        assert!(prefix.is_empty());
+                        assert_eq!(local.as_str(), "stop");
+                    }
+
+                    Token::ElementEnd { end: ElementEnd::Close(_, _), span: _ } => return,
+
+                    // ignored.
+                    Token::Declaration {..} |
+                    Token::ProcessingInstruction {..} |
+                    Token::Comment {..} |
+                    Token::EntityDeclaration {..} |
+                    Token::Text {..} |
+                    Token::Cdata {..} => continue,
+
+                    // not sure.
+                    Token::DtdStart {..} |
+                    Token::EmptyDtd {..} |
+                    Token::DtdEnd {..} => unimplemented!(),
+
+                    // errors.
+                    Token::Attribute {..} |
+                    Token::ElementEnd {..} => unimplemented!()
+                }
+
+
+                let mut offset = 0.0;
+                let mut opacity = 1.0;
+                let mut color = argb_pack_u8s(0, 0, 0, 255);
+
+                loop {
+                    match self.toker.next().unwrap().unwrap() {
+                        Token::Attribute { prefix, local, value, .. } => {
+                            if !prefix.is_empty() { continue; }
+
+                            match &*local {
+                                "offset" => offset = svgtypes::Number::from_str(&*value).unwrap().0 as f32,
+
+                                "stop-opacity" => opacity = svgtypes::Number::from_str(&*value).unwrap().0 as f32,
+
+                                "stop-color" => {
+                                    let c = svgtypes::Color::from_str(&*value).unwrap();
+                                    color = argb_pack_u8s(c.red, c.green, c.blue, c.alpha);
+                                }
+
+                                _ => {
+                                    println!("unknown gradient stop attr {:?}", local);
+                                }
+                            }
+                        }
+
+                        Token::ElementEnd { end: ElementEnd::Empty, span: _ } => break,
+
+                        _ => unimplemented!()
+                    }
+                }
+
+                let [r, g, b, a] = *argb_unpack(color);
+                color = argb_pack([r, g, b, a*opacity].into());
+
+                sb.push(GradientStop { offset, color });
+            }
+        })
+    }
+
+
+    #[must_use]
+    fn skip_attrs(&mut self) -> bool {
+        loop {
+            match self.toker.next().unwrap().unwrap() {
+                Token::Attribute {..} => (),
+                Token::ElementEnd { end: ElementEnd::Open, span: _ } => return true,
+                Token::ElementEnd { end: ElementEnd::Empty, span: _ } => return false,
+                _ => unimplemented!()
+            }
+        }
+    }
+
+    fn visit_children<F: Fn(&mut SvgParser, &Token)>(&mut self, f: F) {
+        loop {
+            let at = self.toker.next().unwrap().unwrap();
+            if let Token::ElementEnd { end: ElementEnd::Close(_, _), span: _ } = at {
+                break;
+            }
+            f(self, &at);
+        }
+    }
+
+    fn skip_children(&mut self) {
+        let mut depth = 0;
+        loop {
+            let at = self.toker.next().unwrap().unwrap();
+            match at {
+                Token::ElementStart {..} => {
+                    depth += 1;
+                }
+
+                Token::ElementEnd { end, .. } => {
+                    match end {
+                        ElementEnd::Open => {
+                            assert!(depth > 0);
+                        }
+
+                        ElementEnd::Close(_, _) => {
+                            if depth == 0 {
+                                break;
+                            }
+                        }
+
+                        ElementEnd::Empty => {}
+                    }
+
+                    depth -= 1;
+                }
+
+                Token::Declaration {..} |
+                Token::ProcessingInstruction {..} |
+                Token::Comment {..} |
+                Token::EntityDeclaration {..} |
+                Token::Attribute {..} |
+                Token::Text {..} |
+                Token::Cdata {..} => (),
+
+                Token::DtdStart {..} |
+                Token::EmptyDtd {..} |
+                Token::DtdEnd {..} => unimplemented!()
+            }
+        }
+    }
+}
 

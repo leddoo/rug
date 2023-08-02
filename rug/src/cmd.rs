@@ -13,7 +13,7 @@ pub enum Cmd<'a> {
     // @todo: color abstraction.
     FillPathSolid   { path: Path<'a>, color: u32 },
     StrokePathSolid { path: Path<'a>, color: u32, width: f32 },
-    FillPathLinearGradient { path: Path<'a>, gradient: LinearGradientId },
+    FillPathLinearGradient { path: Path<'a>, gradient: LinearGradientId, opacity: f32 },
 }
 
 

@@ -15,12 +15,12 @@
 
 
 - todo:
-    - linear gradients.
-        - parse svg.
-        - impl `fill_mask_linear_gradient_n`.
-        - consider removing `GradientStops2`.
-            - the indirection is cheap, compared to the actual fill.
-            - storage doesn't really matter. it's the specialized algo that matters.
+    - radial gradients.
+        - inverse transform or solid fill.
+        - or line segment gradient for non-pad stretch, ig?
+        - ignore degen transforms for now.
+    - impl `fill_mask_linear_gradient_n`.
+    - impl `fill_mask_radial_gradient_n`.
 
     - command metadata for debugging.
 

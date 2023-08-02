@@ -8,10 +8,34 @@ pub fn argb_unpack(v: u32) -> F32x4 {
     let g = (v >>  8) & 0xff;
     let b = (v >>  0) & 0xff;
 
-    let color = U32x4::new(r, g, b, a);
-    let scale = F32x4::splat(255.0);
-    color.as_i32().to_f32() / scale
+    U32x4::new(r, g, b, a).as_i32().to_f32() / 255.0
 }
+
+#[inline(always)]
+pub unsafe fn argb_pack_clamped_255(v: F32x4) -> u32 {
+    let [r, g, b, a] = *v;
+
+    // @temp: float utils.
+    unsafe {
+        let a = a.to_int_unchecked::<i32>() << 24;
+        let r = r.to_int_unchecked::<i32>() << 16;
+        let g = g.to_int_unchecked::<i32>() <<  8;
+        let b = b.to_int_unchecked::<i32>() <<  0;
+        (a | r | g | b) as u32
+    }
+}
+
+#[inline(always)]
+pub fn argb_pack(v: F32x4) -> u32 {
+    let offset = F32x4::splat(0.5);
+    let scale = F32x4::splat(255.0);
+    let min = F32x4::splat(0.0);
+    let max = F32x4::splat(255.0);
+    unsafe { argb_pack_clamped_255(
+        (scale*v + offset).clamp(min, max)
+    )}
+}
+
 
 #[inline(always)]
 pub fn argb_u8x4_unpack(v: U32x4) -> [F32x4; 4] {

@@ -98,7 +98,7 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
                 fill_mask_solid(&mask.img(), blit_offset, color, &mut render_image.img_mut());
             }
 
-            Cmd::FillPathLinearGradient { path, gradient } => {
+            Cmd::FillPathLinearGradient { path, gradient, opacity } => {
                 spall::trace_scope!("rug::render::fill_path_linear_gradient");
 
                 // todo: aabb bounds check.
@@ -125,13 +125,17 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
                 if stops.len() == 2 {
                     let s0 = stops[0];
                     let s1 = stops[1];
+                    let mut c0 = argb_unpack(s0.color);
+                    let mut c1 = argb_unpack(s1.color);
+                    c0[3] *= opacity;
+                    c1[3] *= opacity;
                     fill_mask_linear_gradient_2(
                         p0.lerp(p1, s0.offset), p0.lerp(p1, s1.offset),
-                        argb_unpack(s0.color),  argb_unpack(s1.color),
+                        c0, c1,
                         &mask.img(), blit_offset, &mut render_image.img_mut());
                 }
                 else {
-                    unimplemented!()
+                    println!("skipping gradient with {} stops", stops.len());
                 }
             }
         }
@@ -277,6 +281,8 @@ pub fn fill_mask_linear_gradient_2(
             let d1x = F32x4::splat((p1 - p0)[0]);
             let d1y = F32x4::splat((p1 - p0)[1]);
             let pt = (dpx*d1x + dpy*d1y) / (d1x*d1x + d1y*d1y);
+
+            let pt = pt.clamp(F32x4::ZERO, F32x4::ONE);
 
             let sr =  (F32x4::ONE - pt)*color_0[0] + pt*color_1[0];
             let sg =  (F32x4::ONE - pt)*color_0[1] + pt*color_1[1];

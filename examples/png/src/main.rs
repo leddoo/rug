@@ -40,7 +40,7 @@ fn main() {
                 pb.close_path();
             });
 
-            cb.push(Cmd::FillPathLinearGradient { path, gradient });
+            cb.push(Cmd::FillPathLinearGradient { path, gradient, opacity: 1.0 });
         });
 
 
@@ -78,6 +78,33 @@ fn main() {
         ::image::save_buffer("target/linear-gradient.png", target.as_bytes(), target.width(), target.height(), ::image::ColorType::Rgba8).unwrap();
     }
 
+    // car.
+    if 1==1 {
+        let car = vg_inputs::parse_svg(vg_inputs::CAR_SVG);
+        println!("{}", car.num_cmds());
+
+        let w = 900;
+        let h = 600;
+        let s = 1.0;
+
+        let mut target = Image::new([w, h]);
+
+        let params = RenderParams {
+            clear: 0xffffffff,
+            tfx: Transform::translate([0.0, h as f32].into()) *
+                 Transform::scale([s, -s].into()),
+        };
+
+        let iters = 1;
+        let t0 = std::time::Instant::now();
+        for _ in 0..iters {
+        render(&car, &params, &mut target.img_mut());
+        }
+        println!("{:?}", t0.elapsed()/iters);
+
+        ::image::save_buffer("target/car.png", target.as_bytes(), target.width(), target.height(), ::image::ColorType::Rgba8).unwrap();
+    }
+
     // paris.
     if 0==1 {
         let paris = vg_inputs::parse_svg(vg_inputs::PARIS_SVG);
@@ -109,9 +136,9 @@ fn main() {
     if 0==1 {
         let tiger = vg_inputs::parse_svg(vg_inputs::TIGER_SVG);
 
-        let w = 4*1024;
-        let h = 4*1024;
-        let s = 8.0;
+        let w = 512;
+        let h = 512;
+        let s = 1.0;
 
         let mut target = Image::new([w, h]);
 
