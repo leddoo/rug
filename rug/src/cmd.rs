@@ -1,7 +1,7 @@
 use sti::alloc::Alloc;
 use sti::growing_arena::GrowingArena;
 use sti::vec::Vec;
-use sti::keyed::KSlice;
+use sti::keyed::{KSlice, KVec};
 use sti::simd::*;
 
 use crate::geometry::Transform;
@@ -22,7 +22,6 @@ pub enum Cmd<'a> {
 pub struct GradientStop {
     pub offset:  f32,
     pub color:   u32,
-    pub opacity: f32,
 }
 
 
@@ -49,15 +48,8 @@ pub struct LinearGradient<'a> {
     pub spread: SpreadMethod,
     pub units:  GradientUnits,
     pub tfx:    Transform,
-    pub stops:  GradientStops<'a>
+    pub stops:  &'a [GradientStop],
 }
-
-#[derive(Clone, Copy, Debug)]
-pub enum GradientStops<'a> {
-    Two ([GradientStop; 2]),
-    N   (&'a [GradientStop]),
-}
-
 
 
 pub struct CmdBuf {
@@ -73,19 +65,30 @@ impl CmdBuf {
     pub fn new<F: FnOnce(&mut CmdBufBuilder)>(f: F) -> Self {
         let arena = Box::new(GrowingArena::new());
 
-        let cmds = {
+        let (cmds, linear_gradients) = {
             let mut builder = CmdBufBuilder {
                 arena: arena.as_ref(),
                 path_builder: PathBuilder::new(),
+                gradient_stops_builder: Vec::new(),
+                linear_gradients: KVec::new_in(arena.as_ref()),
                 cmds: Vec::new_in(arena.as_ref()),
             };
 
             f(&mut builder);
 
-            unsafe { core::mem::transmute(Vec::leak(builder.cmds)) }
+            let cmds = unsafe { core::mem::transmute(Vec::leak(builder.cmds)) };
+
+            // @temp
+            let linear_gradients = unsafe {
+                core::mem::transmute(
+                    <KSlice::<LinearGradientId, LinearGradient>>::new_unck(
+                        Vec::leak(builder.linear_gradients.into_inner())))
+            };
+
+            (cmds, linear_gradients)
         };
 
-        CmdBuf { arena, cmds, linear_gradients: KSlice::new_unck(&[]) }
+        CmdBuf { arena, cmds, linear_gradients }
     }
 
     #[inline(always)]
@@ -108,7 +111,12 @@ impl CmdBuf {
 
 pub struct CmdBufBuilder<'a> {
     arena: &'a GrowingArena,
+
     path_builder: PathBuilder,
+
+    gradient_stops_builder: Vec<GradientStop>,
+    linear_gradients: KVec<LinearGradientId, LinearGradient<'a>, &'a GrowingArena>,
+
     cmds: Vec<Cmd<'a>, &'a GrowingArena>,
 }
 
@@ -121,6 +129,18 @@ impl<'a> CmdBufBuilder<'a> {
         self.path_builder.clear();
         f(&mut self.path_builder);
         self.path_builder.build_in(self.arena).leak()
+    }
+
+    #[inline(always)]
+    pub fn build_gradient_stops<F: FnOnce(&mut Vec<GradientStop>)>(&mut self, f: F) -> &'a [GradientStop] {
+        self.gradient_stops_builder.clear();
+        f(&mut self.gradient_stops_builder);
+        Vec::leak(self.gradient_stops_builder.clone_in(self.arena))
+    }
+
+    #[inline(always)]
+    pub fn push_linear_gradient(&mut self, gradient: LinearGradient<'a>) -> LinearGradientId {
+        self.linear_gradients.push(gradient)
     }
 
     #[inline(always)]

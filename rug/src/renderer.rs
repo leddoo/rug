@@ -99,10 +99,40 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
             }
 
             Cmd::FillPathLinearGradient { path, gradient } => {
-                let gradient = cmd_buf.linear_gradient(gradient);
+                spall::trace_scope!("rug::render::fill_path_linear_gradient");
 
-                let _ = (path, gradient);
-                unimplemented!()
+                // todo: aabb bounds check.
+                let aabb = tfx.aabb_transform(path.aabb());
+
+                let (raster_size, raster_origin, blit_offset) =
+                    raster_rect_for(aabb, clip, 4);
+
+                if raster_size.eq(U32x2::ZERO).any() { continue }
+
+                let mut tfx = *tfx;
+                tfx.columns[2] -= raster_origin;
+
+                let mut r = Rasterizer::new(&mut raster_image, *raster_size);
+                r.fill_path(path, &tfx);
+                let mask = r.accumulate();
+
+                let gradient = cmd_buf.linear_gradient(gradient);
+                let stops = gradient.stops;
+
+                let p0 = (tfx * gradient.tfx) * gradient.p0;
+                let p1 = (tfx * gradient.tfx) * gradient.p1;
+
+                if stops.len() == 2 {
+                    let s0 = stops[0];
+                    let s1 = stops[1];
+                    fill_mask_linear_gradient_2(
+                        p0.lerp(p1, s0.offset), p0.lerp(p1, s1.offset),
+                        argb_unpack(s0.color),  argb_unpack(s1.color),
+                        &mask.img(), blit_offset, &mut render_image.img_mut());
+                }
+                else {
+                    unimplemented!()
+                }
             }
         }
     }
@@ -198,4 +228,74 @@ pub fn fill_mask_solid(mask: &Img<f32>, offset: U32x2, color: F32x4, target: &mu
 }
 
 
+pub fn fill_mask_linear_gradient_2(
+    p0: F32x2, p1: F32x2, color_0: F32x4, color_1: F32x4,
+    mask: &Img<f32>, offset: U32x2, target: &mut ImgMut<[F32x4; 4]>
+) {
+    spall::trace_scope!("rug::fill_mask_linear_gradient_2");
+
+    let n = 4;
+
+    let size = U32x2::new(n*target.width(), target.height());
+
+    let begin = offset;
+    let end   = (offset + mask.size()).min(size);
+    if begin.eq(end).any() {
+        return;
+    }
+
+    let u0 = begin.x() / n;
+    let u1 = end.x()   / n;
+    assert!(u0 * n == begin.x());
+    assert!(u1 * n == end.x());
+
+    let mut py = F32x4::splat(0.5);
+
+    for y in begin.y() .. end.y() {
+        let mut px = F32x4::new(0.5, 1.5, 2.5, 3.5);
+
+        for u in u0..u1 {
+            let x = u * n;
+            let mask_x = (x - begin.x()) as usize;
+            let mask_y = (y - begin.y()) as usize;
+
+            let coverage = F32x4::from_array(mask.read_n(mask_x, mask_y));
+
+            let p = (u as usize, y as usize);
+
+            if coverage.lt(F32x4::splat(0.5/255.0)).all() {
+                continue;
+            }
+
+            // skipping alpha blending does not appear to be worth it.
+            // @todo: try on lower spec hardware.
+
+            // pt = dot(p - p0, p1 - p0) / |p1 - p0|^2
+            let dpx = px - F32x4::splat(p0[0]);
+            let dpy = py - F32x4::splat(p0[1]);
+            let d1x = F32x4::splat((p1 - p0)[0]);
+            let d1y = F32x4::splat((p1 - p0)[1]);
+            let pt = (dpx*d1x + dpy*d1y) / (d1x*d1x + d1y*d1y);
+
+            let sr =  (F32x4::ONE - pt)*color_0[0] + pt*color_1[0];
+            let sg =  (F32x4::ONE - pt)*color_0[1] + pt*color_1[1];
+            let sb =  (F32x4::ONE - pt)*color_0[2] + pt*color_1[2];
+            let sa = ((F32x4::ONE - pt)*color_0[3] + pt*color_1[3]) * coverage;
+
+            let [tr, tg, tb, ta] = target[p];
+
+            let one = F32x4::splat(1.0);
+            target[p] = [
+                sa*sr + (one - sa)*ta*tr,
+                sa*sg + (one - sa)*ta*tg,
+                sa*sb + (one - sa)*ta*tb,
+                sa    + (one - sa)*ta,
+            ];
+
+            px += F32x4::splat(n as f32);
+        }
+
+        py += F32x4::ONE;
+    }
+}
 

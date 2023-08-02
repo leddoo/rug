@@ -3,6 +3,8 @@
 use rug::geometry::*;
 use rug::image::*;
 use rug::renderer::*;
+use rug::cmd::*;
+use rug::color::*;
 
 fn main() {
     spall::init("target/trace.spall").unwrap();
@@ -10,6 +12,57 @@ fn main() {
 
     // gradients.
     if 1==1 {
+        let cmd_buf = CmdBuf::new(|cb| {
+            let stops = cb.build_gradient_stops(|sb| {
+                sb.push(GradientStop {
+                    offset: 0.0,
+                    color: argb_pack_u8s(255, 0, 0, 255),
+                });
+                sb.push(GradientStop {
+                    offset: 1.0,
+                    color: argb_pack_u8s(0, 255, 0, 255),
+                });
+            });
+
+            let gradient = cb.push_linear_gradient(LinearGradient {
+                p0: [100.5, 100.5].into(),
+                p1: [299.5, 299.5].into(),
+                spread: SpreadMethod::Pad,
+                units:  GradientUnits::Absolute,
+                tfx:    Transform::ID,
+                stops,
+            });
+
+            let path = cb.build_path(|pb| {
+                pb.move_to([100.0, 300.0].into());
+                pb.line_to([300.0, 300.0].into());
+                pb.line_to([100.0, 100.0].into());
+                pb.close_path();
+            });
+
+            cb.push(Cmd::FillPathLinearGradient { path, gradient });
+        });
+
+
+        let w = 400;
+        let h = 400;
+        let s = 1.0;
+
+        let mut target = Image::new([w, h]);
+
+        let params = RenderParams {
+            clear: 0xffffffff,
+            tfx: Transform::scale1(s),
+        };
+
+        let iters = 1;
+        let t0 = std::time::Instant::now();
+        for _ in 0..iters {
+            render(&cmd_buf, &params, &mut target.img_mut());
+        }
+        println!("{:?}", t0.elapsed()/iters);
+
+        ::image::save_buffer("target/linear-gradient.png", target.as_bytes(), target.width(), target.height(), ::image::ColorType::Rgba8).unwrap();
     }
 
     // paris.
@@ -25,7 +78,7 @@ fn main() {
 
         let params = RenderParams {
             clear: 0xffffffff,
-            tfx: Transform::translate([0.0, w as f32].into()) *
+            tfx: Transform::translate([0.0, h as f32].into()) *
                  Transform::scale([s, -s].into()),
         };
 
