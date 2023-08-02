@@ -16,10 +16,6 @@
 
 - todo:
     - linear gradients.
-        - impl `fill_mask_linear_gradient_2`.
-            - compute vectors.
-            - compute t.
-            - lerp.
         - parse svg.
         - impl `fill_mask_linear_gradient_n`.
         - consider removing `GradientStops2`.

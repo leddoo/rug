@@ -50,9 +50,22 @@ fn main() {
 
         let mut target = Image::new([w, h]);
 
+        let alpha = 15.0/180.0 * core::f32::consts::PI;
+        let rotation = Transform {
+            columns: [
+                [ alpha.cos(), alpha.sin()].into(),
+                [-alpha.sin(), alpha.cos()].into(),
+                [0.0, 0.0].into(),
+            ],
+        };
+        let rotation =
+            Transform::translate([200.0, 200.0].into()) *
+            rotation *
+            Transform::translate([-200.0, -200.0].into());
+
         let params = RenderParams {
             clear: 0xffffffff,
-            tfx: Transform::scale1(s),
+            tfx: Transform::scale1(s) * rotation,
         };
 
         let iters = 1;

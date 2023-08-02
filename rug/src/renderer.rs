@@ -264,6 +264,7 @@ pub fn fill_mask_linear_gradient_2(
             let p = (u as usize, y as usize);
 
             if coverage.lt(F32x4::splat(0.5/255.0)).all() {
+                px += F32x4::splat(n as f32);
                 continue;
             }
 
