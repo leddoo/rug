@@ -26,7 +26,7 @@ pub struct RenderParams {
 // right, so this is the function, we'd put in a trait.
 // which means a renderer is a struct, which would enable
 // allocation caching, for example.
-pub fn render(cmds: &[Cmd], params: &RenderParams, target: &mut ImgMut<u32>) {
+pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>) {
     spall::trace_scope!("rug::render");
 
     let clear = [
@@ -47,8 +47,8 @@ pub fn render(cmds: &[Cmd], params: &RenderParams, target: &mut ImgMut<u32>) {
 
     let tfx = &params.tfx;
 
-    for cmd in cmds {
-        match *cmd {
+    for i in 0..cmd_buf.num_cmds() {
+        match *cmd_buf.cmd(i) {
             Cmd::FillPathSolid { path, color } => {
                 spall::trace_scope!("rug::render::fill_path_solid");
 
@@ -96,6 +96,13 @@ pub fn render(cmds: &[Cmd], params: &RenderParams, target: &mut ImgMut<u32>) {
                 let color = argb_unpack(color);
 
                 fill_mask_solid(&mask.img(), blit_offset, color, &mut render_image.img_mut());
+            }
+
+            Cmd::FillPathLinearGradient { path, gradient } => {
+                let gradient = cmd_buf.linear_gradient(gradient);
+
+                let _ = (path, gradient);
+                unimplemented!()
             }
         }
     }

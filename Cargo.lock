@@ -525,8 +525,8 @@ dependencies = [
 
 [[package]]
 name = "sti"
-version = "0.1.0"
-source = "git+https://github.com/leddoo/sti#10497320afe01f2ae1bd75810024c9f2e732e40a"
+version = "0.1.2"
+source = "git+https://github.com/leddoo/sti#8b149e7c9995c19ae6c1a8fcf43309a84a441734"
 
 [[package]]
 name = "svgtypes"
@@ -540,9 +540,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.27"
+version = "2.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b60f673f44a8255b9c8c657daf66a596d435f2da81a555b06dc644d080ba45e0"
+checksum = "04361975b3f5e348b2189d8dc55bc942f278b2d482a6a0365de5bdd62d351567"
 dependencies = [
  "proc-macro2",
  "quote",
