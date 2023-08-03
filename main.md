@@ -23,9 +23,6 @@
 
 
 - todo:
-    - `radial_gradient_2` use gradient stop offsets.
-    - impl `fill_mask_linear_gradient_n`.
-    - impl `fill_mask_radial_gradient_n`.
     - doc comments for the repr.
     - todos for unsupported gradient properties.
     - transforms.
