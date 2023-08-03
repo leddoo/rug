@@ -1,0 +1,28 @@
+<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <radialGradient id="s1" cx="0.5" cy="0.5" r="0.5" fx="0.4" fy="0.2">
+            <stop offset="0" stop-color="#ffee88"/>
+            <stop offset="1" stop-color="#dd7700"/>
+        </radialGradient>
+        <radialGradient id="s2" cx="0.5" cy="0.5" r="0.5" fx="0.8" fy="0.5">
+            <stop offset="0" stop-color="#ffee88"/>
+            <stop offset="1" stop-color="#dd7700"/>
+        </radialGradient>
+        <radialGradient id="s3" cx="0.5" cy="0.5" r="0.5" fx="0.5" fy="0.9">
+            <stop offset="0" stop-color="#ffee88"/>
+            <stop offset="1" stop-color="#dd7700"/>
+        </radialGradient>
+        <radialGradient id="s4" cx="0.5" cy="0.5" r="0.5" fx="0.1" fy="0.5">
+            <stop offset="0" stop-color="#ffee88"/>
+            <stop offset="1" stop-color="#dd7700"/>
+        </radialGradient>
+    </defs>
+    <g>
+        <path fill="url(#s1)" stroke="#994400" d="M 73 29 C 36 -11 11 5 21 33 L 27 26 C 19 10 34 0 69 35 Z"/>
+        <path fill="url(#s2)" stroke="#994400" d="M 47 8 C 80 -8 95 29 56 55 L 50 50 C 88 23 70 6 55 13 Z"/>
+        <path fill="url(#s3)" stroke="#994400" d="M 77 32 C 99 62 87 89 38 83 L 37 75 C 40 78 104 80 73 39 Z"/>
+        <path fill="url(#s4)" stroke="#994400" d="M 58 84 C 54 104 20 80 50 60 L 44 55 C 8 98 59 111 67 82 Z"/>
+        <path fill="url(#s1)" stroke="#994400" d="M 40 14 C 0 51 3 66 31 82 L 32 74 C 16 61 3 53 48 18 Z"/>
+        <path fill="url(#s2)" stroke="#994400" d="M 31 33 C 50 56 51 40 66 74 L 57 75.7 C 53 56.7 49 61.699997 26 38.7 Z"/>
+    </g>
+</svg>

@@ -14,6 +14,7 @@ pub enum Cmd<'a> {
     FillPathSolid   { path: Path<'a>, color: u32 },
     StrokePathSolid { path: Path<'a>, color: u32, width: f32 },
     FillPathLinearGradient { path: Path<'a>, gradient: LinearGradientId, opacity: f32 },
+    FillPathRadialGradient { path: Path<'a>, gradient: RadialGradientId, opacity: f32 },
 }
 
 
@@ -52,6 +53,21 @@ pub struct LinearGradient<'a> {
 }
 
 
+sti::define_key!(u32, pub RadialGradientId);
+
+#[derive(Clone, Debug)]
+pub struct RadialGradient<'a> {
+    pub cp: F32x2,
+    pub cr: f32,
+    pub fp: F32x2,
+    pub fr: f32,
+    pub spread: SpreadMethod,
+    pub units:  GradientUnits,
+    pub tfx:    Transform,
+    pub stops:  &'a [GradientStop],
+}
+
+
 pub struct CmdBuf {
     #[allow(dead_code)]
     arena: Box<GrowingArena>,
@@ -59,18 +75,20 @@ pub struct CmdBuf {
     cmds: &'static [Cmd<'static>],
 
     linear_gradients: &'static KSlice<LinearGradientId, LinearGradient<'static>>,
+    radial_gradients: &'static KSlice<RadialGradientId, RadialGradient<'static>>,
 }
 
 impl CmdBuf {
     pub fn new<F: FnOnce(&mut CmdBufBuilder)>(f: F) -> Self {
         let arena = Box::new(GrowingArena::new());
 
-        let (cmds, linear_gradients) = {
+        let (cmds, linear_gradients, radial_gradients) = {
             let mut builder = CmdBufBuilder {
                 arena: arena.as_ref(),
                 path_builder: PathBuilder::new(),
                 gradient_stops_builder: Vec::new(),
                 linear_gradients: KVec::new_in(arena.as_ref()),
+                radial_gradients: KVec::new_in(arena.as_ref()),
                 cmds: Vec::new_in(arena.as_ref()),
             };
 
@@ -85,10 +103,17 @@ impl CmdBuf {
                         Vec::leak(builder.linear_gradients.into_inner())))
             };
 
-            (cmds, linear_gradients)
+            // @temp
+            let radial_gradients = unsafe {
+                core::mem::transmute(
+                    <KSlice::<RadialGradientId, RadialGradient>>::new_unck(
+                        Vec::leak(builder.radial_gradients.into_inner())))
+            };
+
+            (cmds, linear_gradients, radial_gradients)
         };
 
-        CmdBuf { arena, cmds, linear_gradients }
+        CmdBuf { arena, cmds, linear_gradients, radial_gradients }
     }
 
     #[inline(always)]
@@ -105,6 +130,11 @@ impl CmdBuf {
     pub fn linear_gradient(&self, id: LinearGradientId) -> &LinearGradient {
         &self.linear_gradients[id]
     }
+
+    #[inline(always)]
+    pub fn radial_gradient(&self, id: RadialGradientId) -> &RadialGradient {
+        &self.radial_gradients[id]
+    }
 }
 
 
@@ -116,6 +146,7 @@ pub struct CmdBufBuilder<'a> {
 
     gradient_stops_builder: Vec<GradientStop>,
     linear_gradients: KVec<LinearGradientId, LinearGradient<'a>, &'a GrowingArena>,
+    radial_gradients: KVec<RadialGradientId, RadialGradient<'a>, &'a GrowingArena>,
 
     cmds: Vec<Cmd<'a>, &'a GrowingArena>,
 }
@@ -141,6 +172,11 @@ impl<'a> CmdBufBuilder<'a> {
     #[inline(always)]
     pub fn push_linear_gradient(&mut self, gradient: LinearGradient<'a>) -> LinearGradientId {
         self.linear_gradients.push(gradient)
+    }
+
+    #[inline(always)]
+    pub fn push_radial_gradient(&mut self, gradient: RadialGradient<'a>) -> RadialGradientId {
+        self.radial_gradients.push(gradient)
     }
 
     #[inline(always)]

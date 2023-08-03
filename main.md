@@ -1,8 +1,9 @@
 
 - next steps: complete rendering of vg-inputs.
     - gradients.
-    - advanced stroking: caps, joins, dashing.
+    - transforms.
     - arcs.
+    - advanced stroking: caps, joins, dashing.
     - shapes.
     - clipping (rect & path).
         - path, thinking render clipped contents to aabb clipped temp buffer.
@@ -22,14 +23,12 @@
 
 
 - todo:
-    - radial gradients.
-        - inverse transform or solid fill.
-        - or line segment gradient for non-pad stretch, ig?
-        - ignore degen transforms for now.
+    - `radial_gradient_2` use gradient stop offsets.
     - impl `fill_mask_linear_gradient_n`.
     - impl `fill_mask_radial_gradient_n`.
     - doc comments for the repr.
     - todos for unsupported gradient properties.
+    - transforms.
 
     - command metadata for debugging.
 
@@ -61,7 +60,6 @@
 
 - backlog:
     - text.
-    - transforms.
     - image sources.
     - compositing.
     - tiling.

@@ -149,7 +149,52 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
                         &mask.img(), blit_offset, &mut render_image.img_mut());
                 }
                 else {
-                    println!("skipping gradient with {} stops", stops.len());
+                    println!("skipping linear gradient with {} stops", stops.len());
+                }
+            }
+
+            Cmd::FillPathRadialGradient { path, gradient, opacity } => {
+                spall::trace_scope!("rug::render::fill_path_radial_gradient");
+
+                let Some(inv_tfx) = tfx.invert(0.00001) else { continue };
+
+                // todo: aabb bounds check.
+                let aabb = tfx.aabb_transform(path.aabb());
+
+                let (raster_size, raster_origin, blit_offset) =
+                    raster_rect_for(aabb, clip, 4);
+
+                if raster_size.eq(U32x2::ZERO).any() { continue }
+
+                let mut tfx = *tfx;
+                tfx.columns[2] -= raster_origin;
+
+                let mut r = Rasterizer::new(&mut raster_image, *raster_size);
+                r.fill_path(path, &tfx);
+                let mask = r.accumulate();
+
+                let gradient = cmd_buf.radial_gradient(gradient);
+                let stops = gradient.stops;
+
+                if let Some(inv_grad_tfx) = gradient.tfx.invert(0.00001) {
+                    if stops.len() == 2 {
+                        let s0 = stops[0];
+                        let s1 = stops[1];
+                        let c0 = argb_unpack(s0.color);
+                        let c1 = argb_unpack(s1.color);
+                        fill_mask_radial_gradient_2(
+                            raster_origin, inv_tfx, inv_grad_tfx,
+                            gradient.cp, gradient.cr,
+                            gradient.fp, gradient.fr,
+                            c0, c1, opacity,
+                            &mask.img(), blit_offset, &mut render_image.img_mut());
+                    }
+                    else {
+                        println!("skipping radial gradient with {} stops", stops.len());
+                    }
+                }
+                else {
+                    println!("skipping radial gradient with degenerate transform");
                 }
             }
         }
@@ -322,6 +367,105 @@ pub fn fill_mask_linear_gradient_2(
         }
 
         py += F32x4::ONE;
+    }
+}
+
+
+/// - input pre-multiplied alpha: no.
+pub fn fill_mask_radial_gradient_2(
+    raster_origin: F32x2, inv_tfx: Transform, inv_grad_tfx: Transform,
+    cp: F32x2, cr: f32,
+    fp: F32x2, fr: f32,
+    color_0: F32x4, color_1: F32x4, opacity: f32,
+    mask: &Img<f32>, offset: U32x2, target: &mut ImgMut<[F32x4; 4]>
+) {
+    spall::trace_scope!("rug::fill_mask_radial_gradient_2");
+
+    let n = 4;
+
+    let size = U32x2::new(n*target.width(), target.height());
+
+    let begin = offset;
+    let end   = (offset + mask.size()).min(size);
+    if begin.eq(end).any() {
+        return;
+    }
+
+    let u0 = begin.x() / n;
+    let u1 = end.x()   / n;
+    assert!(u0 * n == begin.x());
+    assert!(u1 * n == end.x());
+
+    let start = (inv_grad_tfx * inv_tfx) * (raster_origin + F32x2::new(0.5, 0.5));
+    let x_hat = (inv_grad_tfx * inv_tfx).mul_normal(F32x2::new(1.0, 0.0));
+    let y_hat = (inv_grad_tfx * inv_tfx).mul_normal(F32x2::new(0.0, 1.0));
+
+    let x_offsets_x = F32x4::new((0.0*x_hat)[0], (1.0*x_hat)[0], (2.0*x_hat)[0], (3.0*x_hat)[0]);
+    let x_offsets_y = F32x4::new((0.0*x_hat)[1], (1.0*x_hat)[1], (2.0*x_hat)[1], (3.0*x_hat)[1]);
+
+    let mut pp = start;
+
+    for y in begin.y() .. end.y() {
+        let mut px = F32x4::splat(pp[0]) + x_offsets_x;
+        let mut py = F32x4::splat(pp[1]) + x_offsets_y;
+
+        for u in u0..u1 {
+            let x = u * n;
+            let mask_x = (x - begin.x()) as usize;
+            let mask_y = (y - begin.y()) as usize;
+
+            let coverage = F32x4::from_array(mask.read_n(mask_x, mask_y));
+
+            let p = (u as usize, y as usize);
+
+            if coverage.lt(F32x4::splat(0.5/255.0)).all() {
+                px += F32x4::splat(n as f32 * x_hat[0]);
+                py += F32x4::splat(n as f32 * x_hat[1]);
+                continue;
+            }
+
+            let d1x = px - F32x4::splat(fp[0]);
+            let d1y = py - F32x4::splat(fp[1]);
+
+            let d2x = F32x4::splat((fp - cp)[0]);
+            let d2y = F32x4::splat((fp - cp)[1]);
+
+            // k = (-(d1 d2)) / (d1 d1) + sqrt(((d1 d2) / (d1 d1))² + (cr² - d2 d2) / (d1 d1))
+            let d11 = d1x*d1x + d1y*d1y;
+            let d12 = d1x*d2x + d1y*d2y;
+            let d22 = d2x*d2x + d2y*d2y;
+            let discr = (d12/d11)*(d12/d11) + (F32x4::splat(cr*cr) - d22)/d11;
+            // @todo: handle negatives.
+            let discr = discr.at_least(F32x4::ZERO);
+            let k = -(d12/d11) + discr.sqrt();
+
+            // t = (Length(p - fp) - fr) / (k*Length((p-fp)) - fr)
+            let l = d11.sqrt();
+            let fr = F32x4::splat(fr);
+            let pt = (l - fr) / (k*l - fr);
+
+            let pt = pt.clamp(F32x4::ZERO, F32x4::ONE);
+
+            let sr =  (F32x4::ONE - pt)*color_0[0] + pt*color_1[0];
+            let sg =  (F32x4::ONE - pt)*color_0[1] + pt*color_1[1];
+            let sb =  (F32x4::ONE - pt)*color_0[2] + pt*color_1[2];
+            let sa = ((F32x4::ONE - pt)*color_0[3] + pt*color_1[3]) * coverage * opacity;
+
+            let [tr, tg, tb, ta] = target[p];
+
+            let one = F32x4::splat(1.0);
+            target[p] = [
+                sa*sr + (one - sa)*tr,
+                sa*sg + (one - sa)*tg,
+                sa*sb + (one - sa)*tb,
+                sa    + (one - sa)*ta,
+            ];
+
+            px += F32x4::splat(n as f32 * x_hat[0]);
+            py += F32x4::splat(n as f32 * x_hat[1]);
+        }
+
+        pp += y_hat;
     }
 }
 

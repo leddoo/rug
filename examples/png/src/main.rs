@@ -7,11 +7,13 @@ use rug::cmd::*;
 use rug::color::*;
 
 fn draw_svg(name: &str, svg: &str, w: u32, h: u32, s: f32, flip: bool) {
+    println!("drawing {:?}", name);
     spall::trace_scope!("draw_svg", name);
 
     let cmd_buf = vg_inputs::parse_svg(svg);
 
     let mut target = Image::new([w, h]);
+
 
     let params = RenderParams {
         clear: 0xffffffff,
@@ -61,23 +63,36 @@ fn main() {
                 });
             });
 
-            let gradient = cb.push_linear_gradient(LinearGradient {
-                p0: [100.5, 100.5].into(),
-                p1: [299.5, 299.5].into(),
+            let alpha = 35.0/180.0 * core::f32::consts::PI;
+            let rotation = Transform {
+                columns: [
+                    [ alpha.cos(), alpha.sin()].into(),
+                    [-alpha.sin(), alpha.cos()].into(),
+                    [0.0, 0.0].into(),
+                ],
+            };
+
+            let gradient = cb.push_radial_gradient(RadialGradient {
+                cp: [200.0, 200.0].into(), cr: 100.0,
+                fp: [250.0, 200.0].into(), fr:  15.0,
                 spread: SpreadMethod::Pad,
                 units:  GradientUnits::Absolute,
-                tfx:    Transform::ID,
+                tfx:    Transform::translate([200.0, 200.0].into()) *
+                        rotation *
+                        Transform::scale([1.0, 0.5].into()) *
+                        Transform::translate([-200.0, -200.0].into()),
                 stops,
             });
 
             let path = cb.build_path(|pb| {
                 pb.move_to([100.0, 300.0].into());
                 pb.line_to([300.0, 300.0].into());
+                pb.line_to([300.0, 100.0].into());
                 pb.line_to([100.0, 100.0].into());
                 pb.close_path();
             });
 
-            cb.push(Cmd::FillPathLinearGradient { path, gradient, opacity: 1.0 });
+            cb.push(Cmd::FillPathRadialGradient { path, gradient, opacity: 1.0 });
         });
 
 
@@ -112,7 +127,7 @@ fn main() {
         }
         println!("{:?}", t0.elapsed()/iters);
 
-        ::image::save_buffer("target/linear-gradient.png", target.as_bytes(), target.width(), target.height(), ::image::ColorType::Rgba8).unwrap();
+        ::image::save_buffer("target/radial-gradient.png", target.as_bytes(), target.width(), target.height(), ::image::ColorType::Rgba8).unwrap();
     }
 
     // car.

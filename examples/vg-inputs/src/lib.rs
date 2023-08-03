@@ -2,9 +2,9 @@ pub mod svg {
     pub const CAR: &str = include_str!("../res/car.svg");
     pub const GALLARDO: &str = include_str!("../res/gallardo-simp.svg");
     pub const GRADIENT_TRI: &str = include_str!("../res/gradient-tri.svg");
-    pub const INTERTWINGLY: &str = include_str!("../res/intertwingly.svg");
+    pub const INTERTWINGLY: &str = include_str!("../res/intertwingly-simp.svg");
     pub const PARIS: &str = include_str!("../res/paris-30k.svg");
-    pub const RADIAL_GRADIENT_1: &str = include_str!("../res/radialgradient1.svg");
+    pub const RADIAL_GRADIENT_1: &str = include_str!("../res/radialgradient1-simp.svg");
     pub const SCIMITAR: &str = include_str!("../res/scimitar-simp.svg");
     pub const TIGER: &str = include_str!("../res/tiger.svg");
     pub const TOMMEK_CAR: &str = include_str!("../res/tommek_Car-simp.svg");
@@ -33,11 +33,13 @@ pub fn parse_svg(svg: &str) -> CmdBuf {
 
 enum Def {
     LinearGradient(LinearGradientId),
+    RadialGradient(RadialGradientId),
 }
 
 enum Paint {
     Solid(u32),
     LinearGradient(LinearGradientId),
+    RadialGradient(RadialGradientId),
 }
 
 struct SvgParser<'a, 'cb> {
@@ -225,6 +227,9 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
                                                         Def::LinearGradient(g) => {
                                                             fill = Some(Paint::LinearGradient(g));
                                                         }
+                                                        Def::RadialGradient(g) => {
+                                                            fill = Some(Paint::RadialGradient(g));
+                                                        }
                                                     }
                                                 }
                                                 else {
@@ -299,6 +304,10 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
                         Paint::LinearGradient(gradient) => {
                             self.cb.push(Cmd::FillPathLinearGradient { path, gradient, opacity });
                         }
+
+                        Paint::RadialGradient(gradient) => {
+                            self.cb.push(Cmd::FillPathRadialGradient { path, gradient, opacity });
+                        }
                     }
                 }
 
@@ -313,6 +322,10 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
                         }
 
                         Paint::LinearGradient(_) => {
+                            unimplemented!()
+                        }
+
+                        Paint::RadialGradient(_) => {
                             unimplemented!()
                         }
                     }
@@ -443,6 +456,96 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
                             stops,
                         });
                         self.defs.insert(name, Def::LinearGradient(id));
+                    }
+                }
+            }
+
+            "radialGradient" => {
+                let mut id: Option<&'a str> = None;
+                let mut cx = 0.5;
+                let mut cy = 0.5;
+                let mut cr = 0.5;
+                let mut fx = 0.5;
+                let mut fy = 0.5;
+                let mut fr = 0.0;
+                let mut spread = SpreadMethod::Pad;
+                let mut units = GradientUnits::Relative;
+                let mut tfx = Transform::ID;
+
+                let children = loop {
+                    match self.toker.next().unwrap().unwrap() {
+                        Token::Attribute { prefix, local, value, .. } => {
+                            if !prefix.is_empty() { continue; }
+
+                            match &*local {
+                                "id" => {
+                                    id = Some(value.as_str());
+                                }
+
+                                "cx" => cx = svgtypes::Number::from_str(&*value).unwrap().0 as f32,
+                                "cy" => cy = svgtypes::Number::from_str(&*value).unwrap().0 as f32,
+                                "r"  => cr = svgtypes::Number::from_str(&*value).unwrap().0 as f32,
+                                "fx" => fx = svgtypes::Number::from_str(&*value).unwrap().0 as f32,
+                                "fy" => fy = svgtypes::Number::from_str(&*value).unwrap().0 as f32,
+                                "fr" => fr = svgtypes::Number::from_str(&*value).unwrap().0 as f32,
+
+                                "spreadMethod" => {
+                                    match value.as_str() {
+                                        "pad"     => spread = SpreadMethod::Pad,
+                                        "reflect" => spread = SpreadMethod::Reflect,
+                                        "repeat"  => spread = SpreadMethod::Repeat,
+                                        _ => unreachable!()
+                                    }
+                                }
+
+                                "gradientUnits" => {
+                                    match value.as_str() {
+                                        "userSpaceOnUse"    => units = GradientUnits::Absolute,
+                                        "objectBoundingBox" => units = GradientUnits::Relative,
+                                        "reset" => (),
+                                        _ => unreachable!()
+                                    }
+                                }
+
+                                "gradientTransform" => {
+                                    if value.as_str() != "reset" {
+                                        let t = svgtypes::Transform::from_str(&*value).unwrap();
+                                        tfx = Transform { columns: [
+                                            [t.a as f32, t.b as f32].into(),
+                                            [t.c as f32, t.d as f32].into(),
+                                            [t.e as f32, t.f as f32].into(),
+                                        ]};
+                                    }
+                                }
+
+                                _ => {
+                                    println!("unknown radial gradient attr {:?}", local);
+                                }
+                            }
+                        }
+
+                        Token::ElementEnd { end: ElementEnd::Empty, span: _ } => break false,
+                        Token::ElementEnd { end: ElementEnd::Open, span: _ } => break true,
+
+                        _ => unimplemented!()
+                    }
+                };
+
+                if children {
+                    let stops = self.parse_gradient_stops();
+
+                    if let Some(name) = id {
+                        let id = self.cb.push_radial_gradient(RadialGradient {
+                            cp: [cx, cy].into(),
+                            cr,
+                            fp: [fx, fy].into(),
+                            fr,
+                            spread,
+                            units,
+                            tfx,
+                            stops,
+                        });
+                        self.defs.insert(name, Def::RadialGradient(id));
                     }
                 }
             }

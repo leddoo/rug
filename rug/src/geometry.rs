@@ -484,6 +484,36 @@ impl Transform {
             (p0.min(p1)).min(p2.min(p3)),
             (p0.max(p1)).max(p2.max(p3)))
     }
+
+    #[inline(always)]
+    pub fn invert(&self, zero_tolerance: f32) -> Option<Transform> {
+        let [a, c] = *self[0];
+        let [b, d] = *self[1];
+
+        let det = a*d - b*c;
+        if det <= zero_tolerance {
+            return None;
+        }
+
+        let im_c0 = (1.0/det) * F32x2::new( d, -c);
+        let im_c1 = (1.0/det) * F32x2::new(-b,  a);
+
+        // inv * self * v = v
+        // im * (sm*v + st) + it = v
+        // im*sm*v + im*st + it = v
+        // im*st + it = 0
+        // it = -im*st
+
+        let st = self[2];
+        let it = -(st[0]*im_c0 + st[1]*im_c1);
+
+        return Some(Transform { columns: [im_c0, im_c1, it] });
+    }
+
+    #[inline(always)]
+    pub fn mul_normal(&self, normal: F32x2) -> F32x2 {
+        normal[0]*self[0] + normal[1]*self[1]
+    }
 }
 
 impl core::ops::Index<usize> for Transform {
