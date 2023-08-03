@@ -163,6 +163,7 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
                                                     else {
                                                         println!("abs not implemented");
                                                         error = true;
+                                                        break;
                                                     }
                                                 }
 
@@ -173,6 +174,7 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
                                                     else {
                                                         println!("abs not implemented");
                                                         error = true;
+                                                        break;
                                                     }
                                                 }
 
@@ -183,6 +185,7 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
                                                     else {
                                                         println!("abs not implemented");
                                                         error = true;
+                                                        break;
                                                     }
                                                 }
 
@@ -193,6 +196,7 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
                                                     else {
                                                         println!("abs not implemented");
                                                         error = true;
+                                                        break;
                                                     }
                                                 }
 

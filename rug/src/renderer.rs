@@ -184,9 +184,7 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
                         let c1 = argb_unpack(s1.color);
                         fill_mask_radial_gradient_2(
                             raster_origin, inv_tfx, inv_grad_tfx,
-                            gradient.cp, gradient.cr,
-                            gradient.fp, gradient.fr,
-                            c0, c1, opacity,
+                            gradient, c0, s0.offset, c1, s1.offset, opacity,
                             &mask.img(), blit_offset, &mut render_image.img_mut());
                     }
                     else {
@@ -374,14 +372,20 @@ pub fn fill_mask_linear_gradient_2(
 /// - input pre-multiplied alpha: no.
 pub fn fill_mask_radial_gradient_2(
     raster_origin: F32x2, inv_tfx: Transform, inv_grad_tfx: Transform,
-    cp: F32x2, cr: f32,
-    fp: F32x2, fr: f32,
-    color_0: F32x4, color_1: F32x4, opacity: f32,
+    gradient: &RadialGradient,
+    color_0: F32x4, offset_0: f32, color_1: F32x4, offset_1: f32, opacity: f32,
     mask: &Img<f32>, offset: U32x2, target: &mut ImgMut<[F32x4; 4]>
 ) {
     spall::trace_scope!("rug::fill_mask_radial_gradient_2");
 
     let n = 4;
+
+    let cp = gradient.cp;
+    let cr = gradient.cr;
+    let fp = gradient.fp;
+    let fr = gradient.fr;
+
+    let step_scale = 1.0.safe_div(offset_1 - offset_0, 1_000_000.0);
 
     let size = U32x2::new(n*target.width(), target.height());
 
@@ -443,6 +447,8 @@ pub fn fill_mask_radial_gradient_2(
             let l = d11.sqrt();
             let fr = F32x4::splat(fr);
             let pt = (l - fr) / (k*l - fr);
+
+            let pt = (pt - F32x4::splat(offset_0)) * step_scale;
 
             let pt = pt.clamp(F32x4::ZERO, F32x4::ONE);
 
