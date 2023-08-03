@@ -1,0 +1,18 @@
+paris, tiger: https://w3.impa.br/~diego/projects/GanEtAl14/
+don't really know where they got them from.
+
+car: https://w3.impa.br/~diego/projects/GanEtAl14/
+originally seems to be from https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/
+
+gallardo, intertwingly, radialgradient1: https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/
+
+scimitar: https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/
+found under public domain at: https://freesvg.org/vector-illustration-of-scimitar
+
+tommek_Car.svg: https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/
+found under public domain at: https://freesvg.org/realistic-vector-drawing-of-an-old-car
+
+note: the svgs from https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/
+were already re-distributed there. but they don't really know where they came from either.
+for many svgs, i couldn't find the original source.
+

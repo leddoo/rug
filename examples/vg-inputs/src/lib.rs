@@ -1,16 +1,20 @@
-mod tiger;
-use std::collections::HashMap;
-
-pub use tiger::*;
-
-
-pub const PARIS_SVG: &str = include_str!("../res/paris-30k.svg");
-pub const CAR_SVG: &str = include_str!("../res/car.svg");
+pub mod svg {
+    pub const CAR: &str = include_str!("../res/car.svg");
+    pub const GALLARDO: &str = include_str!("../res/gallardo-simp.svg");
+    pub const GRADIENT_TRI: &str = include_str!("../res/gradient-tri.svg");
+    pub const INTERTWINGLY: &str = include_str!("../res/intertwingly.svg");
+    pub const PARIS: &str = include_str!("../res/paris-30k.svg");
+    pub const RADIAL_GRADIENT_1: &str = include_str!("../res/radialgradient1.svg");
+    pub const SCIMITAR: &str = include_str!("../res/scimitar-simp.svg");
+    pub const TIGER: &str = include_str!("../res/tiger.svg");
+    pub const TOMMEK_CAR: &str = include_str!("../res/tommek_Car-simp.svg");
+}
 
 
 use rug::{cmd::*, color::*, geometry::Transform};
 use xmlparser::*;
 use core::str::FromStr;
+use std::collections::HashMap;
 
 
 pub fn parse_svg(svg: &str) -> CmdBuf {
@@ -85,7 +89,14 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
 
         let kind = match at {
             Token::ElementStart { prefix, local, span: _ } => {
-                assert!(prefix.is_empty());
+                if !prefix.is_empty() {
+                    println!("unknown element \"{}:{}\"", prefix, local);
+                    if self.skip_attrs() {
+                        self.skip_children();
+                    }
+                    return;
+                }
+
                 local.as_str()
             }
 
@@ -144,23 +155,43 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
                                             use svgtypes::PathSegment::*;
                                             match e.unwrap() {
                                                 MoveTo { abs, x, y } => {
-                                                    assert!(abs);
-                                                    pb.move_to([x as f32, y as f32].into());
+                                                    if abs {
+                                                        pb.move_to([x as f32, y as f32].into());
+                                                    }
+                                                    else {
+                                                        println!("abs not implemented");
+                                                        error = true;
+                                                    }
                                                 }
 
                                                 LineTo { abs, x, y } => {
-                                                    assert!(abs);
-                                                    pb.line_to([x as f32, y as f32].into());
+                                                    if abs {
+                                                        pb.line_to([x as f32, y as f32].into());
+                                                    }
+                                                    else {
+                                                        println!("abs not implemented");
+                                                        error = true;
+                                                    }
                                                 }
 
                                                 Quadratic { abs, x1, y1, x, y } => {
-                                                    assert!(abs);
-                                                    pb.quad_to([x1 as f32, y1 as f32].into(), [x as f32, y as f32].into());
+                                                    if abs {
+                                                        pb.quad_to([x1 as f32, y1 as f32].into(), [x as f32, y as f32].into());
+                                                    }
+                                                    else {
+                                                        println!("abs not implemented");
+                                                        error = true;
+                                                    }
                                                 }
 
                                                 CurveTo { abs, x1, y1, x2, y2, x, y } => {
-                                                    assert!(abs);
-                                                    pb.cubic_to([x1 as f32, y1 as f32].into(), [x2 as f32, y2 as f32].into(), [x as f32, y as f32].into());
+                                                    if abs {
+                                                        pb.cubic_to([x1 as f32, y1 as f32].into(), [x2 as f32, y2 as f32].into(), [x as f32, y as f32].into());
+                                                    }
+                                                    else {
+                                                        println!("abs not implemented");
+                                                        error = true;
+                                                    }
                                                 }
 
                                                 ClosePath { abs: _ } => {
@@ -302,7 +333,14 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
 
         let kind = match at {
             Token::ElementStart { prefix, local, span: _ } => {
-                assert!(prefix.is_empty());
+                if !prefix.is_empty() {
+                    println!("unknown def \"{}:{}\"", prefix, local);
+                    if self.skip_attrs() {
+                        self.skip_children();
+                    }
+                    return;
+                }
+
                 local.as_str()
             }
 
@@ -363,17 +401,20 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
                                     match value.as_str() {
                                         "userSpaceOnUse"    => units = GradientUnits::Absolute,
                                         "objectBoundingBox" => units = GradientUnits::Relative,
+                                        "reset" => (),
                                         _ => unreachable!()
                                     }
                                 }
 
                                 "gradientTransform" => {
-                                    let t = svgtypes::Transform::from_str(&*value).unwrap();
-                                    tfx = Transform { columns: [
-                                        [t.a as f32, t.b as f32].into(),
-                                        [t.c as f32, t.d as f32].into(),
-                                        [t.e as f32, t.f as f32].into(),
-                                    ]};
+                                    if value.as_str() != "reset" {
+                                        let t = svgtypes::Transform::from_str(&*value).unwrap();
+                                        tfx = Transform { columns: [
+                                            [t.a as f32, t.b as f32].into(),
+                                            [t.c as f32, t.d as f32].into(),
+                                            [t.e as f32, t.f as f32].into(),
+                                        ]};
+                                    }
                                 }
 
                                 _ => {
@@ -490,10 +531,14 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
     fn skip_attrs(&mut self) -> bool {
         loop {
             match self.toker.next().unwrap().unwrap() {
+                Token::Text {..} |
                 Token::Attribute {..} => (),
                 Token::ElementEnd { end: ElementEnd::Open, span: _ } => return true,
                 Token::ElementEnd { end: ElementEnd::Empty, span: _ } => return false,
-                _ => unimplemented!()
+                t => {
+                    dbg!(t);
+                    unimplemented!()
+                }
             }
         }
     }
@@ -527,12 +572,13 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
                             if depth == 0 {
                                 break;
                             }
+                            depth -= 1;
                         }
 
-                        ElementEnd::Empty => {}
+                        ElementEnd::Empty => {
+                            depth -= 1;
+                        }
                     }
-
-                    depth -= 1;
                 }
 
                 Token::Declaration {..} |

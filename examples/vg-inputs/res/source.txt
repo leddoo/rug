@@ -1,6 +1,0 @@
-paris, tiger: https://w3.impa.br/~diego/projects/GanEtAl14/
-don't really know where they got it from.
-
-car: https://w3.impa.br/~diego/projects/GanEtAl14/
-originally seems to be from https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/
-

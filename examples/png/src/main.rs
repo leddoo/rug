@@ -6,9 +6,46 @@ use rug::renderer::*;
 use rug::cmd::*;
 use rug::color::*;
 
+fn draw_svg(name: &str, svg: &str, w: u32, h: u32, s: f32, flip: bool) {
+    spall::trace_scope!("draw_svg", name);
+
+    let cmd_buf = vg_inputs::parse_svg(svg);
+
+    let mut target = Image::new([w, h]);
+
+    let params = RenderParams {
+        clear: 0xffffffff,
+        tfx: if flip {
+            Transform::translate([0.0, h as f32].into()) *
+            Transform::scale([s, -s].into())
+        }
+        else {
+            Transform::scale([s, s].into())
+        },
+    };
+
+    render(&cmd_buf, &params, &mut target.img_mut());
+
+    let path = format!("target/{name}.png");
+    ::image::save_buffer(path, target.as_bytes(), target.width(), target.height(), ::image::ColorType::Rgba8).unwrap();
+}
+
+
 fn main() {
     spall::init("target/trace.spall").unwrap();
     spall::touch();
+
+    if 1==1 {
+        draw_svg("car", vg_inputs::svg::CAR, 900, 600, 1.0, true);
+        draw_svg("gallardo", vg_inputs::svg::GALLARDO, 1901, 1018, 1.0, false);
+        draw_svg("gradient_tri", vg_inputs::svg::GRADIENT_TRI, 1024, 1024, 1.0, false);
+        draw_svg("intertwingly", vg_inputs::svg::INTERTWINGLY, 1024, 1024, 1.0, false);
+        draw_svg("paris", vg_inputs::svg::PARIS, 1024, 1024, 1.0, true);
+        draw_svg("radial_gradient_1", vg_inputs::svg::RADIAL_GRADIENT_1, 1024, 1024, 1.0, false);
+        draw_svg("scimitar", vg_inputs::svg::SCIMITAR, 466, 265, 1.0, false);
+        draw_svg("tiger", vg_inputs::svg::TIGER, 495, 510, 1.0, true);
+        draw_svg("tommek_car", vg_inputs::svg::TOMMEK_CAR, 1052, 744, 1.0, false);
+    }
 
     // gradients.
     if 0==1 {
@@ -79,8 +116,8 @@ fn main() {
     }
 
     // car.
-    if 1==1 {
-        let car = vg_inputs::parse_svg(vg_inputs::CAR_SVG);
+    if 0==1 {
+        let car = vg_inputs::parse_svg(vg_inputs::svg::CAR);
         println!("{}", car.num_cmds());
 
         let w = 900;
@@ -95,19 +132,17 @@ fn main() {
                  Transform::scale([s, -s].into()),
         };
 
-        let iters = 1;
+        let iters = 1000;
         let t0 = std::time::Instant::now();
         for _ in 0..iters {
-        render(&car, &params, &mut target.img_mut());
+            render(&car, &params, &mut target.img_mut());
         }
         println!("{:?}", t0.elapsed()/iters);
-
-        ::image::save_buffer("target/car.png", target.as_bytes(), target.width(), target.height(), ::image::ColorType::Rgba8).unwrap();
     }
 
     // paris.
     if 0==1 {
-        let paris = vg_inputs::parse_svg(vg_inputs::PARIS_SVG);
+        let paris = vg_inputs::parse_svg(vg_inputs::svg::PARIS);
         println!("{}", paris.num_cmds());
 
         let w = 1024;
@@ -122,19 +157,17 @@ fn main() {
                  Transform::scale([s, -s].into()),
         };
 
-        let iters = 1;
+        let iters = 100;
         let t0 = std::time::Instant::now();
         for _ in 0..iters {
-        render(&paris, &params, &mut target.img_mut());
+            render(&paris, &params, &mut target.img_mut());
         }
         println!("{:?}", t0.elapsed()/iters);
-
-        ::image::save_buffer("target/paris.png", target.as_bytes(), target.width(), target.height(), ::image::ColorType::Rgba8).unwrap();
     }
 
     // tiger.
     if 0==1 {
-        let tiger = vg_inputs::parse_svg(vg_inputs::TIGER_SVG);
+        let tiger = vg_inputs::parse_svg(vg_inputs::svg::TIGER);
 
         let w = 512;
         let h = 512;
@@ -147,19 +180,14 @@ fn main() {
             tfx: Transform::scale([s, -s].into()) *
                  Transform::translate([0.0, -510.0].into()),
         };
-        render(&tiger, &params, &mut target.img_mut());
 
-        ::image::save_buffer("target/tiger.png", target.as_bytes(), target.width(), target.height(), ::image::ColorType::Rgba8).unwrap();
-
-        if 0==1 {
-            let iters = 500;
-            let t0 = std::time::Instant::now();
-            for _ in 0..iters {
-                render(&tiger, &params, &mut target.img_mut());
-            }
-            let dt = t0.elapsed() / iters;
-            println!("{:?}, {:?} per path", dt, dt / tiger.num_cmds() as u32);
+        let iters = 500;
+        let t0 = std::time::Instant::now();
+        for _ in 0..iters {
+            render(&tiger, &params, &mut target.img_mut());
         }
+        let dt = t0.elapsed() / iters;
+        println!("{:?}, {:?} per path", dt, dt / tiger.num_cmds() as u32);
     }
 }
 
