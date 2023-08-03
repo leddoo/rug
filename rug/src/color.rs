@@ -12,6 +12,16 @@ pub fn argb_unpack(v: u32) -> F32x4 {
 }
 
 #[inline(always)]
+pub fn argb_unpack_premultiply(v: u32) -> F32x4 {
+    let mut r = argb_unpack(v);
+    r[0] *= r[3];
+    r[1] *= r[3];
+    r[2] *= r[3];
+    return r;
+}
+
+
+#[inline(always)]
 pub unsafe fn argb_pack_clamped_255(v: F32x4) -> u32 {
     let [r, g, b, a] = *v;
 

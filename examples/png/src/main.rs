@@ -11,7 +11,7 @@ fn main() {
     spall::touch();
 
     // gradients.
-    if 1==1 {
+    if 0==1 {
         let cmd_buf = CmdBuf::new(|cb| {
             let stops = cb.build_gradient_stops(|sb| {
                 sb.push(GradientStop {
@@ -122,7 +122,7 @@ fn main() {
                  Transform::scale([s, -s].into()),
         };
 
-        let iters = 100;
+        let iters = 1;
         let t0 = std::time::Instant::now();
         for _ in 0..iters {
         render(&paris, &params, &mut target.img_mut());

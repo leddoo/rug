@@ -23,18 +23,34 @@ pub struct RenderParams {
     // composite mode (whether base color is clear or old target values).
 }
 
+/* implementation notes:
+
+    pre-multiplied alpha:
+        the renderer's internal buffers use pre-multiplied alpha.
+        input colors in the command buffer are *not* pre-multiplied.
+        that would result in information loss, as the input colors
+        (currently) only have 8 bit color depth.
+        furthermore, color interpolation, like in gradients, must be
+        done on the non-pre-multiplied colors.
+
+    srgb vs linear:
+        tbd.
+*/
+
 // right, so this is the function, we'd put in a trait.
 // which means a renderer is a struct, which would enable
 // allocation caching, for example.
 pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>) {
     spall::trace_scope!("rug::render");
 
+    let clear = argb_unpack_premultiply(params.clear);
     let clear = [
-        F32x4::splat(argb_unpack(params.clear)[0]),
-        F32x4::splat(argb_unpack(params.clear)[1]),
-        F32x4::splat(argb_unpack(params.clear)[2]),
-        F32x4::splat(argb_unpack(params.clear)[3]),
+        F32x4::splat(clear[0]),
+        F32x4::splat(clear[1]),
+        F32x4::splat(clear[2]),
+        F32x4::splat(clear[3]),
     ];
+
     let mut render_image = {
         spall::trace_scope!("rug::render::clear");
         let w = (target.width() + 3) / 4;
@@ -67,7 +83,7 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
                 r.fill_path(path, &tfx);
                 let mask = r.accumulate();
 
-                let color = argb_unpack(color);
+                let color = argb_unpack_premultiply(color);
 
                 fill_mask_solid(&mask.img(), blit_offset, color, &mut render_image.img_mut());
             }
@@ -93,7 +109,7 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
                 r.fill_path(path, &tfx);
                 let mask = r.accumulate();
 
-                let color = argb_unpack(color);
+                let color = argb_unpack_premultiply(color);
 
                 fill_mask_solid(&mask.img(), blit_offset, color, &mut render_image.img_mut());
             }
@@ -125,13 +141,11 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
                 if stops.len() == 2 {
                     let s0 = stops[0];
                     let s1 = stops[1];
-                    let mut c0 = argb_unpack(s0.color);
-                    let mut c1 = argb_unpack(s1.color);
-                    c0[3] *= opacity;
-                    c1[3] *= opacity;
+                    let c0 = argb_unpack(s0.color);
+                    let c1 = argb_unpack(s1.color);
                     fill_mask_linear_gradient_2(
                         p0.lerp(p1, s0.offset), p0.lerp(p1, s1.offset),
-                        c0, c1,
+                        c0, c1, opacity,
                         &mask.img(), blit_offset, &mut render_image.img_mut());
                 }
                 else {
@@ -144,6 +158,8 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
     // writeback.
     {
         spall::trace_scope!("rug::render::write_back");
+
+        // @todo: un-premultiply for non-opaque clear.
         target.copy_expand(&render_image.img(), I32x2::ZERO,
             |c| *abgr_u8x4_pack(c));
     }
@@ -172,6 +188,7 @@ pub fn raster_rect_for(rect: Rect, clip: Rect, align: u32) -> (U32x2, F32x2, U32
 }
 
 
+/// - input pre-multiplied alpha: yes.
 pub fn fill_mask_solid(mask: &Img<f32>, offset: U32x2, color: F32x4, target: &mut ImgMut<[F32x4; 4]>) {
     spall::trace_scope!("rug::fill_mask_solid");
 
@@ -215,25 +232,27 @@ pub fn fill_mask_solid(mask: &Img<f32>, offset: U32x2, color: F32x4, target: &mu
 
             let [tr, tg, tb, ta] = target[p];
 
-            let sr = F32x4::splat(color[0]);
-            let sg = F32x4::splat(color[1]);
-            let sb = F32x4::splat(color[2]);
+            let sr = F32x4::splat(color[0]) * coverage;
+            let sg = F32x4::splat(color[1]) * coverage;
+            let sb = F32x4::splat(color[2]) * coverage;
             let sa = F32x4::splat(color[3]) * coverage;
 
             let one = F32x4::splat(1.0);
             target[p] = [
-                sa*sr + (one - sa)*ta*tr,
-                sa*sg + (one - sa)*ta*tg,
-                sa*sb + (one - sa)*ta*tb,
-                sa    + (one - sa)*ta,
+                sr + (one - sa)*tr,
+                sg + (one - sa)*tg,
+                sb + (one - sa)*tb,
+                sa + (one - sa)*ta,
             ];
         }
     }
 }
 
 
+/// - input pre-multiplied alpha: no.
 pub fn fill_mask_linear_gradient_2(
-    p0: F32x2, p1: F32x2, color_0: F32x4, color_1: F32x4,
+    p0: F32x2, p1: F32x2,
+    color_0: F32x4, color_1: F32x4, opacity: f32,
     mask: &Img<f32>, offset: U32x2, target: &mut ImgMut<[F32x4; 4]>
 ) {
     spall::trace_scope!("rug::fill_mask_linear_gradient_2");
@@ -287,15 +306,15 @@ pub fn fill_mask_linear_gradient_2(
             let sr =  (F32x4::ONE - pt)*color_0[0] + pt*color_1[0];
             let sg =  (F32x4::ONE - pt)*color_0[1] + pt*color_1[1];
             let sb =  (F32x4::ONE - pt)*color_0[2] + pt*color_1[2];
-            let sa = ((F32x4::ONE - pt)*color_0[3] + pt*color_1[3]) * coverage;
+            let sa = ((F32x4::ONE - pt)*color_0[3] + pt*color_1[3]) * coverage * opacity;
 
             let [tr, tg, tb, ta] = target[p];
 
             let one = F32x4::splat(1.0);
             target[p] = [
-                sa*sr + (one - sa)*ta*tr,
-                sa*sg + (one - sa)*ta*tg,
-                sa*sb + (one - sa)*ta*tb,
+                sa*sr + (one - sa)*tr,
+                sa*sg + (one - sa)*tg,
+                sa*sb + (one - sa)*tb,
                 sa    + (one - sa)*ta,
             ];
 

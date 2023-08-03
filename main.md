@@ -3,7 +3,14 @@
     - gradients.
     - advanced stroking: caps, joins, dashing.
     - arcs.
+    - shapes.
     - clipping (rect & path).
+        - path, thinking render clipped contents to aabb clipped temp buffer.
+        - then render clip path with image source.
+        - use path for non-aabb rects.
+    - effects (blurs, shadows, etc).
+    - groups (shared opacity).
+    - winding rule.
 
 
 - gradients.
@@ -21,6 +28,8 @@
         - ignore degen transforms for now.
     - impl `fill_mask_linear_gradient_n`.
     - impl `fill_mask_radial_gradient_n`.
+    - doc comments for the repr.
+    - todos for unsupported gradient properties.
 
     - command metadata for debugging.
 
@@ -51,14 +60,10 @@
 
 
 - backlog:
-    - shapes.
-    - groups (shared opacity).
     - text.
-    - effects (shadows, etc).
     - transforms.
     - image sources.
     - compositing.
-    - winding rule.
     - tiling.
     - multi-threading.
     - large path rasterizer.
