@@ -472,6 +472,7 @@ pub fn fill_mask_linear_gradient_n(
             }
             else {
                 debug_assert!(stops.len() > 1);
+
                 // handle ge_n case.
                 sr = F32x4::splat(stop_n.color[0]);
                 sg = F32x4::splat(stop_n.color[1]);
@@ -484,48 +485,26 @@ pub fn fill_mask_linear_gradient_n(
                     let curr = stops[i];
                     let next = stops[i + 1];
 
-                    let c0 = curr.color;
-                    let c1 = next.color;
-
                     let lt_next = pt.lt(F32x4::splat(next.offset));
-                    if lt_next.all() {
+                    let was_new = !has_color & lt_next;
+
+                    if was_new.any() {
                         let scale = 1.0.safe_div(next.offset - curr.offset, 1_000_000.0);
 
                         let t = (pt - F32x4::splat(curr.offset)) * scale;
                         let t = t.clamp(F32x4::ZERO, F32x4::ONE);
 
-                        let r = (F32x4::ONE - t)*c0[0] + t*c1[0];
-                        let g = (F32x4::ONE - t)*c0[1] + t*c1[1];
-                        let b = (F32x4::ONE - t)*c0[2] + t*c1[2];
-                        let a = (F32x4::ONE - t)*c0[3] + t*c1[3];
+                        let r = (F32x4::ONE - t)*curr.color[0] + t*next.color[0];
+                        let g = (F32x4::ONE - t)*curr.color[1] + t*next.color[1];
+                        let b = (F32x4::ONE - t)*curr.color[2] + t*next.color[2];
+                        let a = (F32x4::ONE - t)*curr.color[3] + t*next.color[3];
 
-                        sr = has_color.select_f32(sr, r);
-                        sg = has_color.select_f32(sg, g);
-                        sb = has_color.select_f32(sb, b);
-                        sa = has_color.select_f32(sa, a);
+                        sr = was_new.select_f32(r, sr);
+                        sg = was_new.select_f32(g, sg);
+                        sb = was_new.select_f32(b, sb);
+                        sa = was_new.select_f32(a, sa);
 
-                        has_color = B32x4::ALL;
-                        break;
-                    }
-                    else if lt_next.any() {
-                        debug_assert!((has_color & lt_next).any() == false);
-
-                        let scale = 1.0.safe_div(next.offset - curr.offset, 1_000_000.0);
-
-                        let t = (pt - F32x4::splat(curr.offset)) * scale;
-                        let t = t.clamp(F32x4::ZERO, F32x4::ONE);
-
-                        let r = (F32x4::ONE - t)*c0[0] + t*c1[0];
-                        let g = (F32x4::ONE - t)*c0[1] + t*c1[1];
-                        let b = (F32x4::ONE - t)*c0[2] + t*c1[2];
-                        let a = (F32x4::ONE - t)*c0[3] + t*c1[3];
-
-                        sr = lt_next.select_f32(r, sr);
-                        sg = lt_next.select_f32(g, sg);
-                        sb = lt_next.select_f32(b, sb);
-                        sa = lt_next.select_f32(a, sa);
-
-                        has_color |= lt_next;
+                        has_color |= was_new;
                         if has_color.all() {
                             break;
                         }
@@ -762,6 +741,7 @@ pub fn fill_mask_radial_gradient_n(
             }
             else {
                 debug_assert!(stops.len() > 1);
+
                 // handle ge_n case.
                 sr = F32x4::splat(stop_n.color[0]);
                 sg = F32x4::splat(stop_n.color[1]);
@@ -774,48 +754,26 @@ pub fn fill_mask_radial_gradient_n(
                     let curr = stops[i];
                     let next = stops[i + 1];
 
-                    let c0 = curr.color;
-                    let c1 = next.color;
-
                     let lt_next = pt.lt(F32x4::splat(next.offset));
-                    if lt_next.all() {
+                    let was_new = !has_color & lt_next;
+
+                    if was_new.any() {
                         let scale = 1.0.safe_div(next.offset - curr.offset, 1_000_000.0);
 
                         let t = (pt - F32x4::splat(curr.offset)) * scale;
                         let t = t.clamp(F32x4::ZERO, F32x4::ONE);
 
-                        let r = (F32x4::ONE - t)*c0[0] + t*c1[0];
-                        let g = (F32x4::ONE - t)*c0[1] + t*c1[1];
-                        let b = (F32x4::ONE - t)*c0[2] + t*c1[2];
-                        let a = (F32x4::ONE - t)*c0[3] + t*c1[3];
+                        let r = (F32x4::ONE - t)*curr.color[0] + t*next.color[0];
+                        let g = (F32x4::ONE - t)*curr.color[1] + t*next.color[1];
+                        let b = (F32x4::ONE - t)*curr.color[2] + t*next.color[2];
+                        let a = (F32x4::ONE - t)*curr.color[3] + t*next.color[3];
 
-                        sr = has_color.select_f32(sr, r);
-                        sg = has_color.select_f32(sg, g);
-                        sb = has_color.select_f32(sb, b);
-                        sa = has_color.select_f32(sa, a);
+                        sr = was_new.select_f32(r, sr);
+                        sg = was_new.select_f32(g, sg);
+                        sb = was_new.select_f32(b, sb);
+                        sa = was_new.select_f32(a, sa);
 
-                        has_color = B32x4::ALL;
-                        break;
-                    }
-                    else if lt_next.any() {
-                        debug_assert!((has_color & lt_next).any() == false);
-
-                        let scale = 1.0.safe_div(next.offset - curr.offset, 1_000_000.0);
-
-                        let t = (pt - F32x4::splat(curr.offset)) * scale;
-                        let t = t.clamp(F32x4::ZERO, F32x4::ONE);
-
-                        let r = (F32x4::ONE - t)*c0[0] + t*c1[0];
-                        let g = (F32x4::ONE - t)*c0[1] + t*c1[1];
-                        let b = (F32x4::ONE - t)*c0[2] + t*c1[2];
-                        let a = (F32x4::ONE - t)*c0[3] + t*c1[3];
-
-                        sr = lt_next.select_f32(r, sr);
-                        sg = lt_next.select_f32(g, sg);
-                        sb = lt_next.select_f32(b, sb);
-                        sa = lt_next.select_f32(a, sa);
-
-                        has_color |= lt_next;
+                        has_color |= was_new;
                         if has_color.all() {
                             break;
                         }
