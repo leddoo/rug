@@ -1,6 +1,5 @@
 
 - next steps: complete rendering of vg-inputs.
-    - gradients.
     - transforms.
     - arcs.
     - advanced stroking: caps, joins, dashing.
@@ -23,37 +22,31 @@
 
 
 - todo:
-    - upgrade sti.
-        - careful: `cat_next` has changed.
+    - color abstraction.
     - transforms.
     - rects.
+
+- stuff ig:
     - doc comments for the repr.
+        - of what??
     - todos for unsupported gradient properties.
     - arcs.
-
     - command metadata for debugging.
-
     - sti:
         - `Vec::extend` for path builders.
         - Vec drop tests & fix truncate.
-        - thread local temp arena (dynamic stack enforcement).
-
     - fix image u32/usize nonsense. ~ prob use usize everywhere.
     - `FixedVec` for segment buffer ~ uninit.
-
     - optimization:
         - stroker:
             - allocations.
             - merge left pass into offset pass?
-
     - spall tracing.
         - global comp time disable switch.
         - separate repo.
         - thread local temp buffer for arg formatting.
             - prob use unsafe to gatekeep access.
         - record & log drop/trunc/write-fail events.
-
-
     - support uninit for image.
         - users must write using pointer methods.
         - `render` supports uninit images.

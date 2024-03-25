@@ -1,7 +1,6 @@
-use sti::alloc::Alloc;
 use sti::arena::Arena;
 use sti::vec::Vec;
-use sti::keyed::{KSlice, KVec};
+use sti::keyed::KVec;
 use sti::simd::*;
 
 use crate::geometry::Transform;
@@ -10,11 +9,10 @@ use crate::path::{Path, PathBuilder};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Cmd<'a> {
-    // @todo: color abstraction.
     FillPathSolid   { path: Path<'a>, color: u32 },
-    StrokePathSolid { path: Path<'a>, color: u32, width: f32 },
     FillPathLinearGradient { path: Path<'a>, gradient: LinearGradientId, opacity: f32 },
     FillPathRadialGradient { path: Path<'a>, gradient: RadialGradientId, opacity: f32 },
+    StrokePathSolid { path: Path<'a>, color: u32, width: f32 },
 }
 
 
@@ -72,48 +70,35 @@ pub struct CmdBuf {
     #[allow(dead_code)]
     arena: Box<Arena>,
 
-    cmds: &'static [Cmd<'static>],
+    cmds: Vec<Cmd<'static>>,
 
-    linear_gradients: &'static KSlice<LinearGradientId, LinearGradient<'static>>,
-    radial_gradients: &'static KSlice<RadialGradientId, RadialGradient<'static>>,
+    linear_gradients: KVec<LinearGradientId, LinearGradient<'static>>,
+    radial_gradients: KVec<RadialGradientId, RadialGradient<'static>>,
 }
 
 impl CmdBuf {
     pub fn new<F: FnOnce(&mut CmdBufBuilder)>(f: F) -> Self {
         let arena = Box::new(Arena::new());
 
-        let (cmds, linear_gradients, radial_gradients) = {
-            let mut builder = CmdBufBuilder {
-                arena: arena.as_ref(),
-                path_builder: PathBuilder::new(),
-                gradient_stops_builder: Vec::new(),
-                linear_gradients: KVec::new_in(arena.as_ref()),
-                radial_gradients: KVec::new_in(arena.as_ref()),
-                cmds: Vec::new_in(arena.as_ref()),
-            };
-
-            f(&mut builder);
-
-            let cmds = unsafe { core::mem::transmute(Vec::leak(builder.cmds)) };
-
-            // @temp
-            let linear_gradients = unsafe {
-                core::mem::transmute(
-                    <KSlice::<LinearGradientId, LinearGradient>>::new_unck(
-                        Vec::leak(builder.linear_gradients.into_inner())))
-            };
-
-            // @temp
-            let radial_gradients = unsafe {
-                core::mem::transmute(
-                    <KSlice::<RadialGradientId, RadialGradient>>::new_unck(
-                        Vec::leak(builder.radial_gradients.into_inner())))
-            };
-
-            (cmds, linear_gradients, radial_gradients)
+        let mut builder = CmdBufBuilder {
+            arena: arena.as_ref(),
+            path_builder: PathBuilder::new(),
+            gradient_stops_builder: Vec::new(),
+            linear_gradients: KVec::new(),
+            radial_gradients: KVec::new(),
+            cmds: Vec::new(),
         };
 
-        CmdBuf { arena, cmds, linear_gradients, radial_gradients }
+        f(&mut builder);
+
+        let builder = unsafe { core::mem::transmute::<CmdBufBuilder, CmdBufBuilder>(builder) };
+
+        CmdBuf {
+            arena,
+            cmds: builder.cmds,
+            linear_gradients: builder.linear_gradients,
+            radial_gradients: builder.radial_gradients,
+        }
     }
 
     #[inline(always)]
@@ -145,15 +130,15 @@ pub struct CmdBufBuilder<'a> {
     path_builder: PathBuilder,
 
     gradient_stops_builder: Vec<GradientStop>,
-    linear_gradients: KVec<LinearGradientId, LinearGradient<'a>, &'a Arena>,
-    radial_gradients: KVec<RadialGradientId, RadialGradient<'a>, &'a Arena>,
+    linear_gradients: KVec<LinearGradientId, LinearGradient<'a>>,
+    radial_gradients: KVec<RadialGradientId, RadialGradient<'a>>,
 
-    cmds: Vec<Cmd<'a>, &'a Arena>,
+    cmds: Vec<Cmd<'a>>,
 }
 
 impl<'a> CmdBufBuilder<'a> {
     #[inline(always)]
-    pub fn alloc(&self) -> &'a impl Alloc { self.arena }
+    pub fn alloc(&self) -> &'a Arena { self.arena }
 
     #[inline(always)]
     pub fn build_path<F: FnOnce(&mut PathBuilder)>(&mut self, f: F) -> Path<'a> {
