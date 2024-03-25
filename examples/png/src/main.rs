@@ -81,6 +81,7 @@ fn main() {
                 });
             });
 
+            /*
             let alpha = 35.0/180.0 * core::f32::consts::PI;
             let rotation = Transform {
                 columns: [
@@ -89,6 +90,7 @@ fn main() {
                     [0.0, 0.0].into(),
                 ],
             };
+            */
 
             let gradient = cb.push_radial_gradient(RadialGradient {
                 cp: [200.0, 200.0].into(), cr: 4.0,
@@ -123,6 +125,7 @@ fn main() {
 
         let mut target = Image::new([w, h]);
 
+        /*
         let alpha = 15.0/180.0 * core::f32::consts::PI;
         let rotation = Transform {
             columns: [
@@ -135,6 +138,7 @@ fn main() {
             Transform::translate([200.0, 200.0].into()) *
             rotation *
             Transform::translate([-200.0, -200.0].into());
+        */
 
         let params = RenderParams {
             clear: 0xffffffff,

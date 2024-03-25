@@ -25,9 +25,10 @@
 - todo:
     - upgrade sti.
         - careful: `cat_next` has changed.
+    - transforms.
+    - rects.
     - doc comments for the repr.
     - todos for unsupported gradient properties.
-    - transforms.
     - arcs.
 
     - command metadata for debugging.

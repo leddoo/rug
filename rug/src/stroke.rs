@@ -7,7 +7,7 @@ use crate::rasterizer::ZERO_TOLERANCE_SQ;
 
 // @temp
 pub fn stroke(path: Path, width: f32) -> PathBuf {
-    spall::trace_scope!("rug::stroke");
+    //spall::trace_scope!("rug::stroke");
     return Stroker::stroke(path, width/2.0, width/2.0);
 }
 

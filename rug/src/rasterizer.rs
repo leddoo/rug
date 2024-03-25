@@ -52,7 +52,7 @@ pub struct Rasterizer<'a> {
 
 impl<'a> Rasterizer<'a> {
     pub fn new<A: Alloc>(image: &'a mut Image<f32, A>, size: [u32; 2]) -> Self {
-        spall::trace_scope!("rug::raster::new");
+        //spall::trace_scope!("rug::raster::new");
 
         let size = U32x2::from_array(size);
         let mask_size = size + U32x2::new(2, 1);
@@ -168,7 +168,7 @@ impl<'a> Rasterizer<'a> {
 
 
     pub fn fill_path(&mut self, path: Path, tfx: &Transform) {
-        spall::trace_scope!("rug::raster::fill_path");
+        //spall::trace_scope!("rug::raster::fill_path");
 
         use IterEvent::*;
         let mut begin = None;
@@ -221,7 +221,7 @@ impl<'a> Rasterizer<'a> {
 
     #[cfg(target_arch = "aarch64")]
     pub fn accumulate(mut self) -> ImgMut<'a, f32> {
-        spall::trace_scope!("rug::raster::accum");
+        //spall::trace_scope!("rug::raster::accum");
 
         if self.buffered > 0 {
             self.flush();
@@ -294,7 +294,7 @@ impl<'a> Rasterizer<'a> {
     }
 
     fn flush(&mut self) {
-        spall::trace_scope!("rug::raster::flush");
+        //spall::trace_scope!("rug::raster::flush");
 
         const WIDTH: usize = 4;
         type F32v = F32x4;

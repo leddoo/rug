@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    "spall-rs",
+    #"spall-rs",
     "rug",
     "examples/vg-inputs",
     "examples/raw",
@@ -10,6 +10,8 @@ members = [
 ]
 
 default-members = ["examples/png"]
+
+resolver = "2"
 
 
 [profile.release]

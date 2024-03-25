@@ -29,6 +29,6 @@ fn main() {
 
         cb.push(cmd::Cmd::FillPathSolid { path, color: 42 });
     });
-    println!("{:?}", cmds.cmds());
+    println!("{:?}", cmds.num_cmds());
 }
 

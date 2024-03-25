@@ -378,16 +378,6 @@ impl<'p> Iter<'p> {
     }
 
 
-    #[cfg(test)]
-    fn test_equal(&self, other: &Self) -> bool {
-        println!("{} {} =?= {} {}",
-            self.verb,  self.point,
-            other.verb, other.point);
-           self.verb  == other.verb
-        && self.point == other.point
-    }
-
-
     #[inline(always)]
     pub fn has_next(&self) -> bool {
         self.verb < self.verbs.len()
@@ -510,6 +500,15 @@ impl<'p> Iter<'p> {
             }
         }
     }
+
+    #[cfg(test)]
+    fn test_equal(&self, other: &Self) -> bool {
+        println!("{} {} =?= {} {}",
+            self.verb,  self.point,
+            other.verb, other.point);
+           self.verb  == other.verb
+        && self.point == other.point
+    }
 }
 
 impl<'p> Iterator for Iter<'p> {
@@ -553,7 +552,7 @@ mod tests {
             assert_eq!(iter.next(), Some(IterEvent::Begin([1.0, 1.0].into(), true)));
 
             let mut i2 = iter.clone();
-            assert_eq!(i2.prev_rev(), Some(IterEvent::End([1.0, 1.0].into())));
+            assert_eq!(i2.prev_rev(), Some(IterEvent::End([1.0, 1.0].into(), true)));
 
             assert!(i0.test_equal(&i2));
         }
@@ -600,7 +599,7 @@ mod tests {
 
         {
             let i0 = iter.clone();
-            assert_eq!(iter.next(), Some(IterEvent::End([1.0, 1.0].into())));
+            assert_eq!(iter.next(), Some(IterEvent::End([1.0, 1.0].into(), true)));
 
             let mut i2 = iter.clone();
             assert_eq!(i2.prev_rev(), Some(IterEvent::Begin([1.0, 1.0].into(), true)));
@@ -613,7 +612,7 @@ mod tests {
             assert_eq!(iter.next(), Some(IterEvent::Begin([8.0, 8.0].into(), false)));
 
             let mut i2 = iter.clone();
-            assert_eq!(i2.prev_rev(), Some(IterEvent::End([8.0, 8.0].into())));
+            assert_eq!(i2.prev_rev(), Some(IterEvent::End([8.0, 8.0].into(), false)));
 
             assert!(i0.test_equal(&i2));
         }
@@ -630,7 +629,7 @@ mod tests {
 
         {
             let i0 = iter.clone();
-            assert_eq!(iter.next(), Some(IterEvent::End([9.0, 9.0].into())));
+            assert_eq!(iter.next(), Some(IterEvent::End([9.0, 9.0].into(), false)));
 
             let mut i2 = iter.clone();
             assert_eq!(i2.prev_rev(), Some(IterEvent::Begin([9.0, 9.0].into(), false)));

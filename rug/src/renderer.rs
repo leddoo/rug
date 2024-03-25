@@ -41,7 +41,7 @@ pub struct RenderParams {
 // which means a renderer is a struct, which would enable
 // allocation caching, for example.
 pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>) {
-    spall::trace_scope!("rug::render");
+    //spall::trace_scope!("rug::render");
 
     let clear = argb_unpack_premultiply(params.clear);
     let clear = [
@@ -52,7 +52,7 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
     ];
 
     let mut render_image = {
-        spall::trace_scope!("rug::render::clear");
+        //spall::trace_scope!("rug::render::clear");
         let w = (target.width() + 3) / 4;
         let h = target.height();
         <Image<[F32x4; 4], _>>::with_clear([w, h], clear)
@@ -68,7 +68,7 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
     for i in 0..cmd_buf.num_cmds() {
         match *cmd_buf.cmd(i) {
             Cmd::FillPathSolid { path, color } => {
-                spall::trace_scope!("rug::render::fill_path_solid");
+                //spall::trace_scope!("rug::render::fill_path_solid");
 
                 // todo: aabb bounds check.
                 let aabb = tfx.aabb_transform(path.aabb());
@@ -91,7 +91,7 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
             }
 
             Cmd::StrokePathSolid { path, color, width } => {
-                spall::trace_scope!("rug::render::stroke_path_solid");
+                //spall::trace_scope!("rug::render::stroke_path_solid");
 
                 let stroke = crate::stroke::stroke(path, width);
                 let path = stroke.path();
@@ -117,7 +117,7 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
             }
 
             Cmd::FillPathLinearGradient { path, gradient, opacity } => {
-                spall::trace_scope!("rug::render::fill_path_linear_gradient");
+                //spall::trace_scope!("rug::render::fill_path_linear_gradient");
 
                 // todo: aabb bounds check.
                 let aabb = tfx.aabb_transform(path.aabb());
@@ -167,7 +167,7 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
             }
 
             Cmd::FillPathRadialGradient { path, gradient, opacity } => {
-                spall::trace_scope!("rug::render::fill_path_radial_gradient");
+                //spall::trace_scope!("rug::render::fill_path_radial_gradient");
 
                 let Some(inv_tfx) = tfx.invert(0.00001) else { continue };
 
@@ -224,7 +224,7 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
 
     // writeback.
     {
-        spall::trace_scope!("rug::render::write_back");
+        //spall::trace_scope!("rug::render::write_back");
 
         // @todo: un-premultiply for non-opaque clear.
         target.copy_expand(&render_image.img(), I32x2::ZERO,
@@ -257,7 +257,7 @@ pub fn raster_rect_for(rect: Rect, clip: Rect, align: u32) -> (U32x2, F32x2, U32
 
 /// - input pre-multiplied alpha: yes.
 pub fn fill_mask_solid(mask: &Img<f32>, offset: U32x2, color: F32x4, target: &mut ImgMut<[F32x4; 4]>) {
-    spall::trace_scope!("rug::fill_mask_solid");
+    //spall::trace_scope!("rug::fill_mask_solid");
 
     let n = 4;
 
@@ -330,7 +330,7 @@ pub fn fill_mask_linear_gradient_2(
     color_0: F32x4, color_1: F32x4, opacity: f32,
     mask: &Img<f32>, offset: U32x2, target: &mut ImgMut<[F32x4; 4]>
 ) {
-    spall::trace_scope!("rug::fill_mask_linear_gradient_2");
+    //spall::trace_scope!("rug::fill_mask_linear_gradient_2");
 
     let n = 4;
 
@@ -406,7 +406,7 @@ pub fn fill_mask_linear_gradient_n(
     stops: &[GradientStopF32], opacity: f32,
     mask: &Img<f32>, offset: U32x2, target: &mut ImgMut<[F32x4; 4]>
 ) {
-    spall::trace_scope!("rug::fill_mask_linear_gradient_n");
+    //spall::trace_scope!("rug::fill_mask_linear_gradient_n");
 
     let n = 4;
 
@@ -542,7 +542,7 @@ pub fn fill_mask_radial_gradient_2(
     color_0: F32x4, offset_0: f32, color_1: F32x4, offset_1: f32, opacity: f32,
     mask: &Img<f32>, offset: U32x2, target: &mut ImgMut<[F32x4; 4]>
 ) {
-    spall::trace_scope!("rug::fill_mask_radial_gradient_2");
+    //spall::trace_scope!("rug::fill_mask_radial_gradient_2");
 
     let n = 4;
 
@@ -648,7 +648,7 @@ pub fn fill_mask_radial_gradient_n(
     stops: &[GradientStopF32], opacity: f32,
     mask: &Img<f32>, offset: U32x2, target: &mut ImgMut<[F32x4; 4]>
 ) {
-    spall::trace_scope!("rug::fill_mask_radial_gradient_n");
+    //spall::trace_scope!("rug::fill_mask_radial_gradient_n");
 
     let n = 4;
 
