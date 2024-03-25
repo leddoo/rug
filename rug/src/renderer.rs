@@ -216,7 +216,7 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
                     }
                 }
                 else {
-                    println!("skipping radial gradient with degenerate transform");
+                    //println!("skipping radial gradient with degenerate transform");
                 }
             }
         }

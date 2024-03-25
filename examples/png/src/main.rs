@@ -26,7 +26,15 @@ fn draw_svg(name: &str, svg: &str, w: u32, h: u32, s: f32, flip: bool) {
         },
     };
 
-    render(&cmd_buf, &params, &mut target.img_mut());
+    let t0 = std::time::Instant::now();
+    let mut iters = 0;
+    while t0.elapsed() < std::time::Duration::from_secs(5) {
+        render(&cmd_buf, &params, &mut target.img_mut());
+        iters += 1;
+        break;
+    }
+    let dt = t0.elapsed() / iters;
+    println!("{name:?}: {dt:?}, {iters} iters, {w}x{h}, {:?} per pixel", dt/(w*h));
 
     let path = format!("target/{name}.png");
     ::image::save_buffer(path, target.as_bytes(), target.width(), target.height(), ::image::ColorType::Rgba8).unwrap();
@@ -36,6 +44,8 @@ fn draw_svg(name: &str, svg: &str, w: u32, h: u32, s: f32, flip: bool) {
 fn main() {
     spall::init("target/trace.spall").unwrap();
     spall::touch();
+
+    draw_svg("firefox", &std::fs::read_to_string("target/firefox.svg").unwrap(), 770, 800, 10.0, false);
 
     if 1==1 {
         draw_svg("car", vg_inputs::svg::CAR, 900, 600, 1.0, true);
@@ -58,6 +68,14 @@ fn main() {
                     color: argb_pack_u8s(255, 0, 0, 255),
                 });
                 sb.push(GradientStop {
+                    offset: 0.333,
+                    color: argb_pack_u8s(255, 255, 0, 255),
+                });
+                sb.push(GradientStop {
+                    offset: 0.667,
+                    color: argb_pack_u8s(255, 0, 0, 255),
+                });
+                sb.push(GradientStop {
                     offset: 1.0,
                     color: argb_pack_u8s(0, 255, 0, 255),
                 });
@@ -73,14 +91,17 @@ fn main() {
             };
 
             let gradient = cb.push_radial_gradient(RadialGradient {
-                cp: [200.0, 200.0].into(), cr: 100.0,
-                fp: [250.0, 200.0].into(), fr:  15.0,
+                cp: [200.0, 200.0].into(), cr: 4.0,
+                fp: [200.0, 200.0].into(), fr: 0.0,
                 spread: SpreadMethod::Pad,
                 units:  GradientUnits::Absolute,
+                /*
                 tfx:    Transform::translate([200.0, 200.0].into()) *
                         rotation *
                         Transform::scale([1.0, 0.5].into()) *
                         Transform::translate([-200.0, -200.0].into()),
+                */
+                tfx: Transform::ID,
                 stops,
             });
 
@@ -117,7 +138,7 @@ fn main() {
 
         let params = RenderParams {
             clear: 0xffffffff,
-            tfx: Transform::scale1(s) * rotation,
+            tfx: Transform::scale1(s),// * rotation,
         };
 
         let iters = 1;
