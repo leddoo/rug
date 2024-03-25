@@ -4,7 +4,7 @@ use sti::simd::*;
 
 use core::ptr::NonNull;
 use core::marker::PhantomData;
-use core::mem::{size_of, ManuallyDrop};
+use core::mem::ManuallyDrop;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::geometry::*;
@@ -59,9 +59,9 @@ impl<A: Alloc> PathBuilder<A> {
         PathBuilder {
             verbs:       Vec::new_in(alloc.clone()),
             points:      Vec::new_in(alloc),
-            aabb:        Rect::MAX_MIN,
+            aabb:        Rect::MAX_MIN(),
             in_path:     false,
-            begin_point: F32x2::ZERO,
+            begin_point: F32x2::ZERO(),
             begin_verb:  usize::MAX,
         }
     }
@@ -69,11 +69,6 @@ impl<A: Alloc> PathBuilder<A> {
 
     pub fn in_path(&self) -> bool {
         self.in_path
-    }
-
-    pub fn last_point(&self) -> F32x2 {
-        assert!(self.in_path);
-        *self.points.last().unwrap()
     }
 
 
@@ -143,9 +138,9 @@ impl<A: Alloc> PathBuilder<A> {
     pub fn clear(&mut self) {
         self.verbs.clear();
         self.points.clear();
-        self.aabb        = Rect::MAX_MIN;
+        self.aabb        = Rect::MAX_MIN();
         self.in_path     = false;
-        self.begin_point = F32x2::ZERO;
+        self.begin_point = F32x2::ZERO();
         self.begin_verb  = usize::MAX;
     }
 
@@ -157,7 +152,7 @@ impl<A: Alloc> PathBuilder<A> {
         // ensure aabb is valid.
         let aabb =
             if self.verbs.len() > 0 { self.aabb }
-            else { Rect::ZERO };
+            else { Rect::ZERO() };
 
         // verbs/points are valid by construction.
         unsafe { PathBuf::new_in(&self.verbs, &self.points, aabb, alloc) }
@@ -222,10 +217,10 @@ impl<A: Alloc> PathBuf<A> {
                 num_verbs, num_points,
             });
 
-            let vp: *mut Verb  = cat_next_mut(data.as_ptr(), size_of::<PathData>());
-            let pp: *mut F32x2 = cat_next_mut(vp, verbs.len()*size_of::<Verb>());
+            let vp: *mut Verb  = cat_next_mut(data.as_ptr(), 1);
+            let pp: *mut F32x2 = cat_next_mut(vp, verbs.len());
 
-            let end: *mut u8 = cat_next_mut(pp, points.len()*size_of::<F32x2>());
+            let end: *mut u8 = cat_next_mut(pp, points.len());
             debug_assert_eq!(end as usize - data.as_ptr() as usize, layout.size());
 
             core::ptr::copy(verbs.as_ptr(),  vp, verbs.len());
@@ -313,14 +308,14 @@ impl<'a> Path<'a> {
 
     #[inline(always)]
     pub fn verbs(&self) -> &[Verb] { unsafe {
-        let ptr: *const Verb = cat_next(self.data.as_ptr(), size_of::<PathData>());
+        let ptr: *const Verb = cat_next(self.data.as_ptr(), 1);
         core::slice::from_raw_parts(ptr, self.data().num_verbs as usize)
     }}
 
     #[inline(always)]
     pub fn points(&self) -> &[F32x2] { unsafe {
-        let verbs: *const Verb  = cat_next(self.data.as_ptr(), size_of::<PathData>());
-        let ptr:   *const F32x2 = cat_next(verbs, self.data().num_verbs as usize * size_of::<Verb>());
+        let verbs: *const Verb  = cat_next(self.data.as_ptr(), 1);
+        let ptr:   *const F32x2 = cat_next(verbs, self.data().num_verbs as usize);
         core::slice::from_raw_parts(ptr, self.data().num_points as usize)
     }}
 

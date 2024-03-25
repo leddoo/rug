@@ -405,7 +405,6 @@ version = "0.1.0"
 dependencies = [
  "image",
  "rug",
- "spall",
  "vg-inputs",
 ]
 
@@ -510,10 +509,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62bb4feee49fdd9f707ef802e22365a35de4b7b299de4763d44bfea899442ff9"
 
 [[package]]
-name = "spall"
-version = "0.1.0"
-
-[[package]]
 name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -524,8 +519,8 @@ dependencies = [
 
 [[package]]
 name = "sti"
-version = "0.1.2"
-source = "git+https://github.com/leddoo/sti#8b149e7c9995c19ae6c1a8fcf43309a84a441734"
+version = "0.1.11"
+source = "git+https://github.com/leddoo/sti#314f6ee959b953dc4ecf3509d4b55513aed89b47"
 
 [[package]]
 name = "svgtypes"
@@ -570,7 +565,6 @@ name = "vg-inputs"
 version = "0.1.0"
 dependencies = [
  "rug",
- "spall",
  "svgtypes",
  "xmlparser",
 ]

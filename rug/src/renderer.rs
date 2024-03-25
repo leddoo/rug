@@ -59,7 +59,7 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
     };
 
     let mut raster_image = Image::new([0, 0]);
-    let clip = Rect { min: F32x2::ZERO, max: target.size().as_i32().to_f32() };
+    let clip = Rect { min: F32x2::ZERO(), max: target.size().as_i32().to_f32() };
 
     let mut gradient_stop_buffer = Vec::new();
 
@@ -76,7 +76,7 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
                 let (raster_size, raster_origin, blit_offset) =
                     raster_rect_for(aabb, clip, 4);
 
-                if raster_size.eq(U32x2::ZERO).any() { continue }
+                if raster_size.eq(U32x2::ZERO()).any() { continue }
 
                 let mut tfx = *tfx;
                 tfx.columns[2] -= raster_origin;
@@ -102,7 +102,7 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
                 let (raster_size, raster_origin, blit_offset) =
                     raster_rect_for(aabb, clip, 4);
 
-                if raster_size.eq(U32x2::ZERO).any() { continue }
+                if raster_size.eq(U32x2::ZERO()).any() { continue }
 
                 let mut tfx = *tfx;
                 tfx.columns[2] -= raster_origin;
@@ -125,7 +125,7 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
                 let (raster_size, raster_origin, blit_offset) =
                     raster_rect_for(aabb, clip, 4);
 
-                if raster_size.eq(U32x2::ZERO).any() { continue }
+                if raster_size.eq(U32x2::ZERO()).any() { continue }
 
                 let mut tfx = *tfx;
                 tfx.columns[2] -= raster_origin;
@@ -177,7 +177,7 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
                 let (raster_size, raster_origin, blit_offset) =
                     raster_rect_for(aabb, clip, 4);
 
-                if raster_size.eq(U32x2::ZERO).any() { continue }
+                if raster_size.eq(U32x2::ZERO()).any() { continue }
 
                 let mut tfx = *tfx;
                 tfx.columns[2] -= raster_origin;
@@ -227,7 +227,7 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
         //spall::trace_scope!("rug::render::write_back");
 
         // @todo: un-premultiply for non-opaque clear.
-        target.copy_expand(&render_image.img(), I32x2::ZERO,
+        target.copy_expand(&render_image.img(), I32x2::ZERO(),
             |c| *abgr_u8x4_pack(c));
     }
 }
@@ -376,12 +376,12 @@ pub fn fill_mask_linear_gradient_2(
             let d1y = F32x4::splat((p1 - p0)[1]);
             let pt = (dpx*d1x + dpy*d1y) / (d1x*d1x + d1y*d1y);
 
-            let pt = pt.clamp(F32x4::ZERO, F32x4::ONE);
+            let pt = pt.clamp(F32x4::ZERO(), F32x4::ONE());
 
-            let sr =  (F32x4::ONE - pt)*color_0[0] + pt*color_1[0];
-            let sg =  (F32x4::ONE - pt)*color_0[1] + pt*color_1[1];
-            let sb =  (F32x4::ONE - pt)*color_0[2] + pt*color_1[2];
-            let sa = ((F32x4::ONE - pt)*color_0[3] + pt*color_1[3]) * coverage * opacity;
+            let sr =  (F32x4::ONE() - pt)*color_0[0] + pt*color_1[0];
+            let sg =  (F32x4::ONE() - pt)*color_0[1] + pt*color_1[1];
+            let sb =  (F32x4::ONE() - pt)*color_0[2] + pt*color_1[2];
+            let sa = ((F32x4::ONE() - pt)*color_0[3] + pt*color_1[3]) * coverage * opacity;
 
             let [tr, tg, tb, ta] = target[p];
 
@@ -396,7 +396,7 @@ pub fn fill_mask_linear_gradient_2(
             px += F32x4::splat(n as f32);
         }
 
-        py += F32x4::ONE;
+        py += F32x4::ONE();
     }
 }
 
@@ -492,17 +492,17 @@ pub fn fill_mask_linear_gradient_n(
                         let scale = 1.0.safe_div(next.offset - curr.offset, 1_000_000.0);
 
                         let t = (pt - F32x4::splat(curr.offset)) * scale;
-                        let t = t.clamp(F32x4::ZERO, F32x4::ONE);
+                        let t = t.clamp(F32x4::ZERO(), F32x4::ONE());
 
-                        let r = (F32x4::ONE - t)*curr.color[0] + t*next.color[0];
-                        let g = (F32x4::ONE - t)*curr.color[1] + t*next.color[1];
-                        let b = (F32x4::ONE - t)*curr.color[2] + t*next.color[2];
-                        let a = (F32x4::ONE - t)*curr.color[3] + t*next.color[3];
+                        let r = (F32x4::ONE() - t)*curr.color[0] + t*next.color[0];
+                        let g = (F32x4::ONE() - t)*curr.color[1] + t*next.color[1];
+                        let b = (F32x4::ONE() - t)*curr.color[2] + t*next.color[2];
+                        let a = (F32x4::ONE() - t)*curr.color[3] + t*next.color[3];
 
-                        sr = was_new.select_f32(r, sr);
-                        sg = was_new.select_f32(g, sg);
-                        sb = was_new.select_f32(b, sb);
-                        sa = was_new.select_f32(a, sa);
+                        sr = was_new.select(r, sr);
+                        sg = was_new.select(g, sg);
+                        sb = was_new.select(b, sb);
+                        sa = was_new.select(a, sa);
 
                         has_color |= was_new;
                         if has_color.all() {
@@ -530,7 +530,7 @@ pub fn fill_mask_linear_gradient_n(
             px += F32x4::splat(n as f32);
         }
 
-        py += F32x4::ONE;
+        py += F32x4::ONE();
     }
 }
 
@@ -606,7 +606,7 @@ pub fn fill_mask_radial_gradient_2(
             let d22 = d2x*d2x + d2y*d2y;
             let discr = (d12/d11)*(d12/d11) + (F32x4::splat(cr*cr) - d22)/d11;
             // @todo: handle negatives.
-            let discr = discr.at_least(F32x4::ZERO);
+            let discr = discr.at_least(F32x4::ZERO());
             let k = -(d12/d11) + discr.sqrt();
 
             // t = (Length(p - fp) - fr) / (k*Length((p-fp)) - fr)
@@ -616,12 +616,12 @@ pub fn fill_mask_radial_gradient_2(
 
             let pt = (pt - F32x4::splat(offset_0)) * step_scale;
 
-            let pt = pt.clamp(F32x4::ZERO, F32x4::ONE);
+            let pt = pt.clamp(F32x4::ZERO(), F32x4::ONE());
 
-            let sr =  (F32x4::ONE - pt)*color_0[0] + pt*color_1[0];
-            let sg =  (F32x4::ONE - pt)*color_0[1] + pt*color_1[1];
-            let sb =  (F32x4::ONE - pt)*color_0[2] + pt*color_1[2];
-            let sa = ((F32x4::ONE - pt)*color_0[3] + pt*color_1[3]) * coverage * opacity;
+            let sr =  (F32x4::ONE() - pt)*color_0[0] + pt*color_1[0];
+            let sg =  (F32x4::ONE() - pt)*color_0[1] + pt*color_1[1];
+            let sb =  (F32x4::ONE() - pt)*color_0[2] + pt*color_1[2];
+            let sa = ((F32x4::ONE() - pt)*color_0[3] + pt*color_1[3]) * coverage * opacity;
 
             let [tr, tg, tb, ta] = target[p];
 
@@ -713,7 +713,7 @@ pub fn fill_mask_radial_gradient_n(
             let d22 = d2x*d2x + d2y*d2y;
             let discr = (d12/d11)*(d12/d11) + (F32x4::splat(cr*cr) - d22)/d11;
             // @todo: handle negatives.
-            let discr = discr.at_least(F32x4::ZERO);
+            let discr = discr.at_least(F32x4::ZERO());
             let k = -(d12/d11) + discr.sqrt();
 
             // t = (Length(p - fp) - fr) / (k*Length((p-fp)) - fr)
@@ -761,17 +761,17 @@ pub fn fill_mask_radial_gradient_n(
                         let scale = 1.0.safe_div(next.offset - curr.offset, 1_000_000.0);
 
                         let t = (pt - F32x4::splat(curr.offset)) * scale;
-                        let t = t.clamp(F32x4::ZERO, F32x4::ONE);
+                        let t = t.clamp(F32x4::ZERO(), F32x4::ONE());
 
-                        let r = (F32x4::ONE - t)*curr.color[0] + t*next.color[0];
-                        let g = (F32x4::ONE - t)*curr.color[1] + t*next.color[1];
-                        let b = (F32x4::ONE - t)*curr.color[2] + t*next.color[2];
-                        let a = (F32x4::ONE - t)*curr.color[3] + t*next.color[3];
+                        let r = (F32x4::ONE() - t)*curr.color[0] + t*next.color[0];
+                        let g = (F32x4::ONE() - t)*curr.color[1] + t*next.color[1];
+                        let b = (F32x4::ONE() - t)*curr.color[2] + t*next.color[2];
+                        let a = (F32x4::ONE() - t)*curr.color[3] + t*next.color[3];
 
-                        sr = was_new.select_f32(r, sr);
-                        sg = was_new.select_f32(g, sg);
-                        sb = was_new.select_f32(b, sb);
-                        sa = was_new.select_f32(a, sa);
+                        sr = was_new.select(r, sr);
+                        sg = was_new.select(g, sg);
+                        sb = was_new.select(b, sb);
+                        sa = was_new.select(a, sa);
 
                         has_color |= was_new;
                         if has_color.all() {

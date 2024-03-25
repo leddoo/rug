@@ -1,5 +1,5 @@
 use sti::alloc::Alloc;
-use sti::growing_arena::GrowingArena;
+use sti::arena::Arena;
 use sti::vec::Vec;
 use sti::keyed::{KSlice, KVec};
 use sti::simd::*;
@@ -70,7 +70,7 @@ pub struct RadialGradient<'a> {
 
 pub struct CmdBuf {
     #[allow(dead_code)]
-    arena: Box<GrowingArena>,
+    arena: Box<Arena>,
 
     cmds: &'static [Cmd<'static>],
 
@@ -80,7 +80,7 @@ pub struct CmdBuf {
 
 impl CmdBuf {
     pub fn new<F: FnOnce(&mut CmdBufBuilder)>(f: F) -> Self {
-        let arena = Box::new(GrowingArena::new());
+        let arena = Box::new(Arena::new());
 
         let (cmds, linear_gradients, radial_gradients) = {
             let mut builder = CmdBufBuilder {
@@ -140,15 +140,15 @@ impl CmdBuf {
 
 
 pub struct CmdBufBuilder<'a> {
-    arena: &'a GrowingArena,
+    arena: &'a Arena,
 
     path_builder: PathBuilder,
 
     gradient_stops_builder: Vec<GradientStop>,
-    linear_gradients: KVec<LinearGradientId, LinearGradient<'a>, &'a GrowingArena>,
-    radial_gradients: KVec<RadialGradientId, RadialGradient<'a>, &'a GrowingArena>,
+    linear_gradients: KVec<LinearGradientId, LinearGradient<'a>, &'a Arena>,
+    radial_gradients: KVec<RadialGradientId, RadialGradient<'a>, &'a Arena>,
 
-    cmds: Vec<Cmd<'a>, &'a GrowingArena>,
+    cmds: Vec<Cmd<'a>, &'a Arena>,
 }
 
 impl<'a> CmdBufBuilder<'a> {

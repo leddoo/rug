@@ -69,7 +69,7 @@ impl<'a> Rasterizer<'a> {
             size,
             safe_size: size + F32x2::splat(0.9),
             deltas_len,
-            buffer: [[F32x2::ZERO; 2]; BUFFER_SIZE],
+            buffer: [[F32x2::ZERO(); 2]; BUFFER_SIZE],
             buffered: 0,
         }
     }
@@ -85,7 +85,7 @@ impl<'a> Rasterizer<'a> {
 
     #[inline(always)]
     pub fn is_bounded(&self, p0: F32x2) -> bool {
-        let safe_rect = rect(F32x2::ZERO, self.safe_size);
+        let safe_rect = rect(F32x2::ZERO(), self.safe_size);
         safe_rect.contains(p0)
     }
 
@@ -234,7 +234,7 @@ impl<'a> Rasterizer<'a> {
 
         for y in 0..h {
 
-            let mut c = F32x4::ZERO;
+            let mut c = F32x4::ZERO();
 
             let aligned_w = w/4*4;
 
@@ -305,7 +305,7 @@ impl<'a> Rasterizer<'a> {
 
         // zero out the extra lines, so we don't rasterize garbage.
         for i in self.buffered .. batches * WIDTH {
-            self.buffer[i] = [F32x2::ZERO; 2]
+            self.buffer[i] = [F32x2::ZERO(); 2]
         }
 
         for batch in 0..batches {
@@ -328,13 +328,13 @@ impl<'a> Rasterizer<'a> {
 
             let dx = x1 - x0;
             let dy = y1 - y0;
-            let dx_inv = safe_div(F32v::ONE, dx, F32v::splat(1_000_000.0));
-            let dy_inv = safe_div(F32v::ONE, dy, F32v::splat(1_000_000.0));
+            let dx_inv = safe_div(F32v::ONE(), dx, F32v::splat(1_000_000.0));
+            let dy_inv = safe_div(F32v::ONE(), dy, F32v::splat(1_000_000.0));
 
-            let x_step = F32v::ONE.with_sign_of(dx);
-            let y_step = F32v::ONE.with_sign_of(dy);
-            let x_nudge = -dx.lt(F32v::ZERO).as_i32().to_f32();
-            let y_nudge = -dy.lt(F32v::ZERO).as_i32().to_f32();
+            let x_step = F32v::ONE().with_sign_of(dx);
+            let y_step = F32v::ONE().with_sign_of(dy);
+            let x_nudge = -dx.lt(F32v::ZERO()).as_i32().to_f32();
+            let y_nudge = -dy.lt(F32v::ZERO()).as_i32().to_f32();
 
             let x_dt = dx_inv.abs();
             let y_dt = dy_inv.abs();
@@ -347,7 +347,8 @@ impl<'a> Rasterizer<'a> {
             let x_steps = (x_i1 - x_i0).abs().to_i32_unck();
             let y_steps = (y_i1 - y_i0).abs().to_i32_unck();
             let steps = x_steps + y_steps;
-            let max_steps = steps.hmax();
+            //let max_steps = steps.hmax();
+            let max_steps = steps[0].max(steps[1]).max(steps[2].max(steps[3]));
 
             let mut x_prev = x0;
             let mut y_prev = y0;
@@ -366,25 +367,25 @@ impl<'a> Rasterizer<'a> {
                 let prev_base = row_base;
                 let prev_x_i  = x_i;
 
-                let x_left = x_rem.gt(I32v::ZERO);
-                let y_left = y_rem.gt(I32v::ZERO);
+                let x_left = x_rem.gt(I32v::ZERO());
+                let y_left = y_rem.gt(I32v::ZERO());
                 let any_left = x_left | y_left;
                 let is_x = (x_t_next.le(y_t_next) & x_left) | !y_left;
                 let is_y = !is_x;
 
-                let x = any_left.select_f32(is_x.select_f32(x_next, x0 + y_t_next*dx), x_prev);
-                let y = any_left.select_f32(is_y.select_f32(y_next, y0 + x_t_next*dy), y_prev);
+                let x = any_left.select(is_x.select(x_next, x0 + y_t_next*dx), x_prev);
+                let y = any_left.select(is_y.select(y_next, y0 + x_t_next*dy), y_prev);
 
-                x_next   += is_x.select_f32(x_step, F32v::ZERO);
-                y_next   += is_y.select_f32(y_step, F32v::ZERO);
-                x_t_next += is_x.select_f32(x_dt, F32v::ZERO);
-                y_t_next += is_y.select_f32(y_dt, F32v::ZERO);
+                x_next   += is_x.select(x_step, F32v::ZERO());
+                y_next   += is_y.select(y_step, F32v::ZERO());
+                x_t_next += is_x.select(x_dt, F32v::ZERO());
+                y_t_next += is_y.select(y_dt, F32v::ZERO());
 
-                x_i      += (is_x & x_left).select_f32(x_step, F32v::ZERO);
-                x_rem    -= is_x.select_i32(I32v::ONE, I32v::ZERO);
+                x_i      += (is_x & x_left).select(x_step, F32v::ZERO());
+                x_rem    -= is_x.select(I32v::ONE(), I32v::ZERO());
 
-                row_base += (is_y & y_left).select_i32(row_delta, I32v::ZERO);
-                y_rem    -= is_y.select_i32(I32v::ONE, I32v::ZERO);
+                row_base += (is_y & y_left).select(row_delta, I32v::ZERO());
+                y_rem    -= is_y.select(I32v::ONE(), I32v::ZERO());
 
                 add_deltas(self, prev_base, prev_x_i, x_prev, y_prev, x, y);
 
@@ -405,8 +406,8 @@ impl<'a> Rasterizer<'a> {
 
         #[inline(always)]
         fn safe_div(a: F32v, b: F32v, default: F32v) -> F32v {
-            let is_zero = b.eq(F32v::ZERO);
-            is_zero.select_f32(default, a/b)
+            let is_zero = b.eq(F32v::ZERO());
+            is_zero.select(default, a/b)
         }
 
         #[inline(always)]

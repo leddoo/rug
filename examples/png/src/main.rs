@@ -8,7 +8,7 @@ use rug::color::*;
 
 fn draw_svg(name: &str, svg: &str, w: u32, h: u32, s: f32, flip: bool) {
     println!("drawing {:?}", name);
-    spall::trace_scope!("draw_svg", name);
+    //spall::trace_scope!("draw_svg", name);
 
     let cmd_buf = vg_inputs::parse_svg(svg);
 
@@ -42,10 +42,10 @@ fn draw_svg(name: &str, svg: &str, w: u32, h: u32, s: f32, flip: bool) {
 
 
 fn main() {
-    spall::init("target/trace.spall").unwrap();
-    spall::touch();
+    //spall::init("target/trace.spall").unwrap();
+    //spall::touch();
 
-    draw_svg("firefox", &std::fs::read_to_string("target/firefox.svg").unwrap(), 770, 800, 10.0, false);
+    //draw_svg("firefox", &std::fs::read_to_string("target/firefox.svg").unwrap(), 770, 800, 10.0, false);
 
     if 1==1 {
         draw_svg("car", vg_inputs::svg::CAR, 900, 600, 1.0, true);
@@ -103,7 +103,7 @@ fn main() {
                         Transform::scale([1.0, 0.5].into()) *
                         Transform::translate([-200.0, -200.0].into()),
                 */
-                tfx: Transform::ID,
+                tfx: Transform::ID(),
                 stops,
             });
 

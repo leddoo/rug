@@ -18,7 +18,7 @@ use std::collections::HashMap;
 
 
 pub fn parse_svg(svg: &str) -> CmdBuf {
-    spall::trace_scope!("vg-inputs::parse_svg");
+    //spall::trace_scope!("vg-inputs::parse_svg");
 
     CmdBuf::new(|cb| {
         let mut parser = SvgParser {
@@ -50,7 +50,7 @@ struct SvgParser<'a, 'cb> {
 
 impl<'a, 'cb> SvgParser<'a, 'cb> {
     fn parse_svg(&mut self) {
-        spall::trace_scope!("vg-inputs::parse_svg::svg");
+        //spall::trace_scope!("vg-inputs::parse_svg::svg");
 
         // find `<svg>`
         loop {
@@ -87,7 +87,7 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
     }
 
     fn parse_element(&mut self, at: &Token) {
-        spall::trace_scope!("vg-inputs::parse_svg::element");
+        //spall::trace_scope!("vg-inputs::parse_svg::element");
 
         let kind = match at {
             Token::ElementStart { prefix, local, span: _ } => {
@@ -134,7 +134,7 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
             }
 
             "path" => {
-                spall::trace_scope!("vg-inputs::parse_svg::path");
+                //spall::trace_scope!("vg-inputs::parse_svg::path");
 
                 let mut path:           Option<rug::path::Path> = None;
                 let mut fill:           Option<Paint> = None;
@@ -346,7 +346,7 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
     }
 
     fn parse_def(&mut self, at: &Token) {
-        spall::trace_scope!("vg-inputs::parse_svg::def");
+        //spall::trace_scope!("vg-inputs::parse_svg::def");
 
         let kind = match at {
             Token::ElementStart { prefix, local, span: _ } => {
@@ -388,7 +388,7 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
                 let mut y1 = 1.0;
                 let mut spread = SpreadMethod::Pad;
                 let mut units = GradientUnits::Relative;
-                let mut tfx = Transform::ID;
+                let mut tfx = Transform::ID();
 
                 let children = loop {
                     match self.toker.next().unwrap().unwrap() {
@@ -474,7 +474,7 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
                 let mut fr = 0.0;
                 let mut spread = SpreadMethod::Pad;
                 let mut units = GradientUnits::Relative;
-                let mut tfx = Transform::ID;
+                let mut tfx = Transform::ID();
 
                 let children = loop {
                     match self.toker.next().unwrap().unwrap() {

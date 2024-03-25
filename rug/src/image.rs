@@ -173,7 +173,7 @@ impl<T: Copy, A: Alloc> Image<T, A> {
         let [w, h] = new_size;
         let new_len = (w as usize).checked_mul(h as usize).unwrap();
 
-        vec.reserve_exact(new_len);
+        vec.reserve_exactly(new_len);
         unsafe {
             let base = vec.as_mut_ptr();
             for i in 0..new_len {

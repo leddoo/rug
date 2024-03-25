@@ -54,10 +54,14 @@ pub const fn rect(min: F32x2, max: F32x2) -> Rect {
 }
 
 impl Rect {
-    pub const ZERO: Rect = rect(F32x2::ZERO, F32x2::ZERO);
+    #[allow(non_snake_case)]
+    #[inline(always)]
+    pub fn ZERO() -> Rect { rect(F32x2::ZERO(), F32x2::ZERO()) }
 
     /// invalid rect, useful for constructing aabbs with Rect::include.
-    pub const MAX_MIN: Rect = rect(F32x2::MAX, F32x2::MIN);
+    #[allow(non_snake_case)]
+    #[inline(always)]
+    pub fn MAX_MIN() -> Rect { rect(F32x2::MAX(), F32x2::MIN()) }
 
     #[inline(always)]
     pub fn valid(self) -> bool {
@@ -447,10 +451,12 @@ pub struct Transform {
 }
 
 impl Transform {
-    pub const ID: Transform = Transform::scale1(1.0);
+    #[allow(non_snake_case)]
+    #[inline(always)]
+    pub fn ID() -> Transform { Transform::scale1(1.0) }
 
     #[inline(always)]
-    pub const fn scale(s: F32x2) -> Transform {
+    pub fn scale(s: F32x2) -> Transform {
         Transform { columns: [
             F32x2::from_array([s.x(), 0.0  ]),
             F32x2::from_array([0.0,   s.y()]),
@@ -459,7 +465,7 @@ impl Transform {
     }
 
     #[inline(always)]
-    pub const fn scale1(s: f32) -> Transform {
+    pub fn scale1(s: f32) -> Transform {
         Transform { columns: [
             F32x2::from_array([  s, 0.0]),
             F32x2::from_array([0.0,   s]),
@@ -468,8 +474,8 @@ impl Transform {
     }
 
     #[inline(always)]
-    pub const fn translate(v: F32x2) -> Transform {
-        let mut result = Transform::ID;
+    pub fn translate(v: F32x2) -> Transform {
+        let mut result = Transform::ID();
         result.columns[2] = v;
         result
     }

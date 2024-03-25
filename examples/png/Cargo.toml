@@ -7,5 +7,4 @@ edition = "2021"
 rug = { path = "../../rug" }
 vg-inputs = { path = "../vg-inputs" }
 image = "0.24.6"
-spall = { path = "../../spall-rs" }
 
