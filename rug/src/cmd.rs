@@ -67,6 +67,8 @@ pub struct RadialGradient<'a> {
 
 
 pub struct CmdBuf {
+    // this doesn't need to be boxed, cause the user can't create
+    // persistent refs to it.
     #[allow(dead_code)]
     arena: Box<Arena>,
 

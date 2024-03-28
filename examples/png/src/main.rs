@@ -108,10 +108,10 @@ fn main() {
             });
 
             let path = cb.build_path(|pb| {
-                pb.move_to([100.0, 300.0].into());
-                pb.line_to([300.0, 300.0].into());
-                pb.line_to([300.0, 100.0].into());
-                pb.line_to([100.0, 100.0].into());
+                pb.move_to([100.0, 300.0]);
+                pb.line_to([300.0, 300.0]);
+                pb.line_to([300.0, 100.0]);
+                pb.line_to([100.0, 100.0]);
                 pb.close_path();
             });
 

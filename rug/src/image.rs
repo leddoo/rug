@@ -162,13 +162,37 @@ impl<'a, T: Copy> Clone for Img<'a, T> {
 }
 
 
-pub struct Image<T: Copy, A: Alloc> {
+pub struct Image<T: Copy, A: Alloc = GlobalAlloc> {
     data:   Vec<T, A>,
     size:   U32x2,
     stride: usize,
 }
 
+impl<T: Copy> Image<T> {
+    #[track_caller]
+    pub fn new(size: [u32; 2]) -> Self  where T: Default {
+        Self::with_clear_in(size, T::default(), GlobalAlloc)
+    }
+
+    #[track_caller]
+    pub fn with_clear(size: [u32; 2], clear: T) -> Self {
+        Self::with_clear_in(size, clear, GlobalAlloc)
+    }
+}
+
 impl<T: Copy, A: Alloc> Image<T, A> {
+    #[track_caller]
+    pub fn new_in(size: [u32; 2], alloc: A) -> Self  where T: Default {
+        Self::with_clear_in(size, T::default(), alloc)
+    }
+
+    #[track_caller]
+    pub fn with_clear_in(size: [u32; 2], clear: T, alloc: A) -> Self {
+        let mut data = Vec::new_in(alloc);
+        let stride = Self::resize_and_clear_vec(&mut data, size, clear);
+        Image { data, size: size.into(), stride }
+    }
+
     fn resize_and_clear_vec(vec: &mut Vec<T, A>, new_size: [u32; 2], clear: T) -> usize {
         let [w, h] = new_size;
         let new_len = (w as usize).checked_mul(h as usize).unwrap();
@@ -185,35 +209,7 @@ impl<T: Copy, A: Alloc> Image<T, A> {
         return w as usize;
     }
 
-    #[track_caller]
-    pub fn with_clear_in(size: [u32; 2], clear: T, alloc: A) -> Self {
-        let mut data = Vec::new_in(alloc);
-        let stride = Self::resize_and_clear_vec(&mut data, size, clear);
-        Image { data, size: size.into(), stride }
-    }
 
-    #[track_caller]
-    pub fn new_in(size: [u32; 2], alloc: A) -> Self  where T: Default {
-        Self::with_clear_in(size, T::default(), alloc)
-    }
-}
-
-impl<T: Copy> Image<T, GlobalAlloc> {
-    #[track_caller]
-    #[inline(always)]
-    pub fn with_clear(size: [u32; 2], clear: T) -> Self {
-        Image::with_clear_in(size, clear, GlobalAlloc)
-    }
-
-    #[track_caller]
-    #[inline(always)]
-    pub fn new(size: [u32; 2]) -> Self  where T: Default {
-        Image::new_in(size, GlobalAlloc)
-    }
-}
-
-
-impl<T: Copy, A: Alloc> Image<T, A> {
     #[inline(always)]
     pub fn data(&self) -> &[T] { self.data.as_ref() }
 

@@ -158,7 +158,7 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
                                             match e.unwrap() {
                                                 MoveTo { abs, x, y } => {
                                                     if abs {
-                                                        pb.move_to([x as f32, y as f32].into());
+                                                        pb.move_to([x as f32, y as f32]);
                                                     }
                                                     else {
                                                         println!("abs not implemented");
@@ -169,7 +169,7 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
 
                                                 LineTo { abs, x, y } => {
                                                     if abs {
-                                                        pb.line_to([x as f32, y as f32].into());
+                                                        pb.line_to([x as f32, y as f32]);
                                                     }
                                                     else {
                                                         println!("abs not implemented");
@@ -180,7 +180,7 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
 
                                                 Quadratic { abs, x1, y1, x, y } => {
                                                     if abs {
-                                                        pb.quad_to([x1 as f32, y1 as f32].into(), [x as f32, y as f32].into());
+                                                        pb.quad_to([x1 as f32, y1 as f32], [x as f32, y as f32]);
                                                     }
                                                     else {
                                                         println!("abs not implemented");
@@ -191,7 +191,7 @@ impl<'a, 'cb> SvgParser<'a, 'cb> {
 
                                                 CurveTo { abs, x1, y1, x2, y2, x, y } => {
                                                     if abs {
-                                                        pb.cubic_to([x1 as f32, y1 as f32].into(), [x2 as f32, y2 as f32].into(), [x as f32, y as f32].into());
+                                                        pb.cubic_to([x1 as f32, y1 as f32], [x2 as f32, y2 as f32], [x as f32, y as f32]);
                                                     }
                                                     else {
                                                         println!("abs not implemented");

@@ -39,26 +39,20 @@ pub enum Verb {
 
 
 
-pub struct PathBuilder<A: Alloc = GlobalAlloc> {
-    verbs:  Vec<Verb,  A>,
-    points: Vec<F32x2, A>,
+pub struct PathBuilder {
+    verbs:  Vec<Verb>,
+    points: Vec<F32x2>,
     aabb:        Rect,
     in_path:     bool,
     begin_point: F32x2,
     begin_verb:  usize,
 }
 
-impl PathBuilder<GlobalAlloc> {
+impl PathBuilder {
     pub fn new() -> Self {
-        PathBuilder::new_in(GlobalAlloc)
-    }
-}
-
-impl<A: Alloc> PathBuilder<A> {
-    pub fn new_in(alloc: A) -> Self  where A: Clone {
         PathBuilder {
-            verbs:       Vec::new_in(alloc.clone()),
-            points:      Vec::new_in(alloc),
+            verbs:       Vec::new(),
+            points:      Vec::new(),
             aabb:        Rect::MAX_MIN(),
             in_path:     false,
             begin_point: F32x2::ZERO(),
@@ -72,7 +66,11 @@ impl<A: Alloc> PathBuilder<A> {
     }
 
 
-    pub fn move_to(&mut self, p0: F32x2) {
+    #[inline(always)]
+    pub fn move_to(&mut self, p0: impl Into<F32x2>) {
+        self.move_to_core(p0.into());
+    }
+    fn move_to_core(&mut self, p0: F32x2) {
         if self.in_path {
             self._end_path(Verb::EndOpen);
         }
@@ -85,16 +83,22 @@ impl<A: Alloc> PathBuilder<A> {
         self.begin_verb  = self.verbs.len() - 1;
     }
 
-    #[track_caller]
-    pub fn line_to(&mut self, p1: F32x2) {
+    #[inline(always)]
+    pub fn line_to(&mut self, p1: impl Into<F32x2>) {
+        self.line_to_core(p1.into())
+    }
+    fn line_to_core(&mut self, p1: F32x2) {
         assert!(self.in_path);
         self.verbs.push(Verb::Line);
         self.points.push(p1);
         self.aabb.include(p1);
     }
 
-    #[track_caller]
-    pub fn quad_to(&mut self, p1: F32x2, p2: F32x2) {
+    #[inline(always)]
+    pub fn quad_to(&mut self, p1: impl Into<F32x2>, p2: impl Into<F32x2>) {
+        self.quad_to_core(p1.into(), p2.into());
+    }
+    fn quad_to_core(&mut self, p1: F32x2, p2: F32x2) {
         assert!(self.in_path);
         self.verbs.push(Verb::Quad);
         self.points.push(p1);
@@ -103,8 +107,11 @@ impl<A: Alloc> PathBuilder<A> {
         self.aabb.include(p2);
     }
 
-    #[track_caller]
-    pub fn cubic_to(&mut self, p1: F32x2, p2: F32x2, p3: F32x2) {
+    #[inline(always)]
+    pub fn cubic_to(&mut self, p1: impl Into<F32x2>, p2: impl Into<F32x2>, p3: impl Into<F32x2>) {
+        self.cubic_to_core(p1.into(), p2.into(), p3.into());
+    }
+    fn cubic_to_core(&mut self, p1: F32x2, p2: F32x2, p3: F32x2) {
         assert!(self.in_path);
         self.verbs.push(Verb::Cubic);
         self.points.push(p1);
@@ -144,7 +151,7 @@ impl<A: Alloc> PathBuilder<A> {
         self.begin_verb  = usize::MAX;
     }
 
-    pub fn build_in<B: Alloc>(&mut self, alloc: B) -> PathBuf<B> {
+    pub fn build_in<A: Alloc>(&mut self, alloc: A) -> PathBuf<A> {
         if self.in_path {
             self._end_path(Verb::EndOpen);
         }
@@ -248,6 +255,9 @@ impl<A: Alloc> PathBuf<A> {
     }
 }
 
+unsafe impl<A: Alloc + Send> Send for PathBuf<A> {}
+unsafe impl<A: Alloc + Sync> Sync for PathBuf<A> {}
+
 impl<A: Alloc + Clone> Clone for PathBuf<A> {
     fn clone(&self) -> Self {
         let old_refs = self.data().refs.fetch_add(1, Ordering::Relaxed);
@@ -269,7 +279,7 @@ impl<A: Alloc> Drop for PathBuf<A> {
             if old_refs == 1 {
                 let layout = PathData::layout(
                     self.data().num_verbs  as usize,
-                    self.data().num_points as usize).unwrap();
+                    self.data().num_points as usize).unwrap_unchecked();
                 self.alloc.free(self.data.cast(), layout);
             }
         }
@@ -524,14 +534,14 @@ mod tests {
     fn path_iterator() {
         let path = {
             let mut pb = PathBuilder::new();
-            pb.move_to([1.0, 1.0].into());
-            pb.line_to([2.0, 2.0].into());
-            pb.quad_to([3.0, 3.0].into(), [4.0, 4.0].into());
-            pb.cubic_to([5.0, 5.0].into(), [6.0, 6.0].into(), [7.0, 7.0].into());
+            pb.move_to([1.0, 1.0]);
+            pb.line_to([2.0, 2.0]);
+            pb.quad_to([3.0, 3.0], [4.0, 4.0]);
+            pb.cubic_to([5.0, 5.0], [6.0, 6.0], [7.0, 7.0]);
             pb.close_path();
 
-            pb.move_to([8.0, 8.0].into());
-            pb.line_to([9.0, 9.0].into());
+            pb.move_to([8.0, 8.0]);
+            pb.line_to([9.0, 9.0]);
 
             pb.build()
         };

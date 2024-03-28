@@ -2,9 +2,9 @@ use rug::*;
 
 fn main() {
     let mut pb = path::PathBuilder::new();
-    pb.move_to([1.0, 1.0].into());
-    pb.line_to([9.0, 1.0].into());
-    pb.line_to([5.0, 4.0].into());
+    pb.move_to([1.0, 1.0]);
+    pb.line_to([9.0, 1.0]);
+    pb.line_to([5.0, 4.0]);
     pb.close_path();
 
     let path_buf = pb.build();
@@ -21,9 +21,9 @@ fn main() {
 
     let cmds = cmd::CmdBuf::new(|cb| {
         let path = cb.build_path(|pb| {
-            pb.move_to([1.0, 1.0].into());
-            pb.line_to([9.0, 1.0].into());
-            pb.line_to([5.0, 4.0].into());
+            pb.move_to([1.0, 1.0]);
+            pb.line_to([9.0, 1.0]);
+            pb.line_to([5.0, 4.0]);
             pb.close_path();
         });
 
