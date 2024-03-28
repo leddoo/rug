@@ -4,6 +4,7 @@ use sti::float::*;
 use crate::geometry::*;
 use crate::color::*;
 use crate::image::*;
+use crate::path::Path;
 use crate::cmd::*;
 use crate::rasterizer::Rasterizer;
 
@@ -65,7 +66,6 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
     for i in 0..cmd_buf.num_cmds() {
         match *cmd_buf.cmd(i) {
             Cmd::FillPathSolid { path, color } => {
-                // todo: aabb rejection.
                 let aabb = tfx.aabb_transform(path.aabb());
 
                 let (raster_size, raster_origin, blit_offset) =
@@ -89,7 +89,6 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
                 let stroke = crate::stroke::stroke(path, width);
                 let path = stroke.path();
 
-                // todo: aabb rejection.
                 let aabb = tfx.aabb_transform(path.aabb());
 
                 let (raster_size, raster_origin, blit_offset) =
@@ -110,7 +109,6 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
             }
 
             Cmd::FillPathLinearGradient { path, gradient, opacity } => {
-                // todo: aabb rejection.
                 let aabb = tfx.aabb_transform(path.aabb());
 
                 let (raster_size, raster_origin, blit_offset) =
@@ -160,7 +158,6 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
             Cmd::FillPathRadialGradient { path, gradient, opacity } => {
                 let Some(inv_tfx) = tfx.invert(0.00001) else { continue };
 
-                // todo: aabb rejection.
                 let aabb = tfx.aabb_transform(path.aabb());
 
                 let (raster_size, raster_origin, blit_offset) =
@@ -221,7 +218,118 @@ pub fn render(cmd_buf: &CmdBuf, params: &RenderParams, target: &mut ImgMut<u32>)
     {
         // @todo: un-premultiply for non-opaque clear.
         target.copy_expand(&render_image.img(), I32x2::ZERO(),
-            |c| *abgr_u8x4_pack(c));
+            |c| *abgr_u8x_pack(c));
+    }
+}
+
+
+pub struct RenderTarget {
+    size: [u32; 2],
+    image: Image<[F32x4; 4]>,
+    tfx: Transform,
+    user_clip: Rect,
+    net_clip: Rect, // `clip` clipped to `image`
+    raster_cache: Image<f32>,
+}
+
+impl RenderTarget {
+    pub fn new() -> Self {
+        Self {
+            size: [0, 0],
+            image: Image::with_clear([0, 0], [F32x::ZERO(); 4]),
+            tfx: Transform::ID(),
+            user_clip: Rect { min: F32x2::ZERO(), max: F32x2::MAX() },
+            net_clip: Rect::ZERO(),
+            raster_cache: Image::new([0, 0]),
+        }
+    }
+
+    pub fn size(&self) -> [u32; 2] {
+        self.size
+    }
+
+    pub fn resize(&mut self, new_size: [u32; 2], clear: u32) {
+        if new_size != self.size {
+            let w = (new_size[0] + 3) / 4;
+            let h = new_size[1];
+            let clear = argb_unpack_premultiply(clear);
+            let clear = [
+                F32x::splat(clear[0]),
+                F32x::splat(clear[1]),
+                F32x::splat(clear[2]),
+                F32x::splat(clear[3]),
+            ];
+            self.size = new_size;
+            self.image.resize_and_clear([w, h], clear);
+            self.net_clip = self.user_clip.clamp_to(self.image_clip());
+        }
+    }
+
+    pub fn clear(&mut self, clear: u32) {
+        let clear = argb_unpack_premultiply(clear);
+        let clear = [
+            F32x::splat(clear[0]),
+            F32x::splat(clear[1]),
+            F32x::splat(clear[2]),
+            F32x::splat(clear[3]),
+        ];
+        self.image.clear(clear);
+    }
+
+
+    #[inline]
+    pub fn transform(&self) -> Transform {
+        self.tfx
+    }
+
+    /// returns the old transform.
+    #[inline]
+    pub fn set_transform(&mut self, new_tfx: Transform) -> Transform {
+        core::mem::replace(&mut self.tfx, new_tfx)
+    }
+
+    #[inline]
+    pub fn clip(&self) -> Rect {
+        self.user_clip
+    }
+
+    /// returns the old clip.
+    #[inline]
+    pub fn set_clip(&mut self, new_clip: Rect) -> Rect {
+        self.net_clip = new_clip.clamp_to(self.image_clip());
+        core::mem::replace(&mut self.user_clip, new_clip)
+    }
+
+    fn image_clip(&self) -> Rect {
+        Rect { min: F32x2::ZERO(), max: U32x2::from_array(self.size).as_i32().to_f32() }
+    }
+
+
+    /*
+    pub fn draw_line(&mut self, p0: F32x2, p1: F32x2, color: u32) {
+        todo!()
+    }
+
+    pub fn fill_rect(&mut self, p0: F32x2, size: F32x2, color: u32) {
+        todo!()
+    }
+
+    pub fn stroke_rect(&mut self, p0: F32x2, size: F32x2, color: u32) {
+        todo!()
+    }
+    */
+
+    pub fn fill_path(&mut self, path: Path, color: u32) {
+        fill_path_solid(path, color, self.tfx, self.net_clip, &mut self.raster_cache, &mut self.image.img_mut());
+    }
+
+    pub fn stroke_path(&mut self, path: Path, width: f32, color: u32) {
+        stroke_path_solid(path, width, color, self.tfx, self.net_clip, &mut self.raster_cache, &mut self.image.img_mut());
+    }
+
+
+    pub fn write_to_image(&self, dst: &mut ImgMut<u32>) {
+        dst.copy_expand(&self.image.img(), I32x2::ZERO(), |c| *abgr_u8x_pack(c));
     }
 }
 
@@ -245,6 +353,67 @@ pub fn raster_rect_for(rect: Rect, clip: Rect, align: u32) -> (U32x2, F32x2, U32
     let raster_origin = F32x2::new(x0,      raster_rect.min.y());
     let blit_offset   = (raster_origin - clip.min).to_i32_unck().as_u32();
     (raster_size, raster_origin, blit_offset)
+}
+
+
+pub fn fill_path_solid<const N: usize>(
+    path: Path,
+    color: u32,
+    tfx: Transform,
+    clip: Rect,
+    raster_image_cache: &mut Image<f32>,
+    target: &mut ImgMut<[F32x<N>; 4]>)
+where (): SimdLanes<N>
+{
+    let aabb = tfx.aabb_transform(path.aabb());
+
+    let (raster_size, raster_origin, blit_offset) =
+        raster_rect_for(aabb, clip, 4);
+
+    if raster_size.eq(U32x2::ZERO()).any() { return }
+
+    let mut tfx = tfx;
+    tfx.columns[2] -= raster_origin;
+
+    let mut r = Rasterizer::new(raster_image_cache, *raster_size);
+    r.fill_path(path, &tfx);
+    let mask = r.accumulate();
+
+    let color = argb_unpack_premultiply(color);
+
+    fill_mask_solid(&mask.img(), blit_offset, color, target);
+}
+
+pub fn stroke_path_solid<const N: usize>(
+    path: Path,
+    width: f32,
+    color: u32,
+    tfx: Transform,
+    clip: Rect,
+    raster_image_cache: &mut Image<f32>,
+    target: &mut ImgMut<[F32x<N>; 4]>)
+where (): SimdLanes<N>
+{
+    let stroke = crate::stroke::stroke(path, width);
+    let path = stroke.path();
+
+    let aabb = tfx.aabb_transform(path.aabb());
+
+    let (raster_size, raster_origin, blit_offset) =
+        raster_rect_for(aabb, clip, 4);
+
+    if raster_size.eq(U32x2::ZERO()).any() { return }
+
+    let mut tfx = tfx;
+    tfx.columns[2] -= raster_origin;
+
+    let mut r = Rasterizer::new(raster_image_cache, *raster_size);
+    r.fill_path(path, &tfx);
+    let mask = r.accumulate();
+
+    let color = argb_unpack_premultiply(color);
+
+    fill_mask_solid(&mask.img(), blit_offset, color, target);
 }
 
 

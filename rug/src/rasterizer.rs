@@ -30,6 +30,7 @@ pub struct Rasterizer<'a> {
     size: F32x2,
     safe_size: F32x2,
     deltas_len: i32,
+    // @todo: static vec.
     buffer: [[F32x2; 2]; BUFFER_SIZE],
     buffered: usize,
 }

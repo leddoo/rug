@@ -22,8 +22,6 @@
 
 
 - todo:
-    - immediate mode render target.
-    - sti: make alloc trait unsafe? clone must satisfy can free on clone.
     - color abstraction.
     - transforms.
     - rects.

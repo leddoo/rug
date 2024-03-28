@@ -97,7 +97,7 @@ pub fn argb_u8x4_pack(v: [F32x4; 4]) -> U32x4 {
 
 
 #[inline(always)]
-pub unsafe fn abgr_u8x4_pack_clamped_255(v: [F32x4; 4]) -> U32x4 {
+pub unsafe fn abgr_u8x_pack_clamped_255<const N: usize>(v: [F32x<N>; 4]) -> U32x<N> where (): SimdLanes<N> {
     let [r, g, b, a] = v;
 
     let a = a.to_i32_unck() << 24;
@@ -108,13 +108,13 @@ pub unsafe fn abgr_u8x4_pack_clamped_255(v: [F32x4; 4]) -> U32x4 {
 }
 
 #[inline(always)]
-pub fn abgr_u8x4_pack(v: [F32x4; 4]) -> U32x4 {
-    let offset = F32x4::splat(0.5);
-    let scale = F32x4::splat(255.0);
-    let min = F32x4::splat(0.0);
-    let max = F32x4::splat(255.0);
+pub fn abgr_u8x_pack<const N: usize>(v: [F32x<N>; 4]) -> U32x<N> where (): SimdLanes<N> {
+    let offset = F32x::splat(0.5);
+    let scale = F32x::splat(255.0);
+    let min = F32x::splat(0.0);
+    let max = F32x::splat(255.0);
     let [r, g, b, a] = v;
-    unsafe { abgr_u8x4_pack_clamped_255([
+    unsafe { abgr_u8x_pack_clamped_255([
         (scale*r + offset).clamp(min, max),
         (scale*g + offset).clamp(min, max),
         (scale*b + offset).clamp(min, max),

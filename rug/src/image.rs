@@ -181,32 +181,14 @@ impl<T: Copy> Image<T> {
 }
 
 impl<T: Copy, A: Alloc> Image<T, A> {
-    #[track_caller]
     pub fn new_in(size: [u32; 2], alloc: A) -> Self  where T: Default {
         Self::with_clear_in(size, T::default(), alloc)
     }
 
-    #[track_caller]
     pub fn with_clear_in(size: [u32; 2], clear: T, alloc: A) -> Self {
         let mut data = Vec::new_in(alloc);
         let stride = Self::resize_and_clear_vec(&mut data, size, clear);
         Image { data, size: size.into(), stride }
-    }
-
-    fn resize_and_clear_vec(vec: &mut Vec<T, A>, new_size: [u32; 2], clear: T) -> usize {
-        let [w, h] = new_size;
-        let new_len = (w as usize).checked_mul(h as usize).unwrap();
-
-        vec.reserve_exactly(new_len);
-        unsafe {
-            let base = vec.as_mut_ptr();
-            for i in 0..new_len {
-                base.add(i).write(clear);
-            }
-            vec.set_len(new_len);
-        }
-
-        return w as usize;
     }
 
 
@@ -286,6 +268,32 @@ impl<T: Copy, A: Alloc> Image<T, A> {
         self.stride = Self::resize_and_clear_vec(&mut self.data, new_size, clear);
         self.size = new_size.into();
     }
+
+    fn resize_and_clear_vec(vec: &mut Vec<T, A>, new_size: [u32; 2], clear: T) -> usize {
+        let [w, h] = new_size;
+        let new_len = (w as usize).checked_mul(h as usize).unwrap();
+
+        vec.reserve_exactly(new_len);
+        unsafe {
+            let base = vec.as_mut_ptr();
+            for i in 0..new_len {
+                base.add(i).write(clear);
+            }
+            vec.set_len(new_len);
+        }
+
+        return w as usize;
+    }
+
+    pub fn clear(&mut self, clear: T) {
+        unsafe {
+            let base = self.data.as_mut_ptr();
+            for i in 0..self.data.len() {
+                base.add(i).write(clear);
+            }
+        }
+    }
+
 }
 
 impl<T: Copy, A: Alloc> core::ops::Index<(usize, usize)> for Image<T, A> {
