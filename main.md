@@ -23,8 +23,8 @@
 
 - todo:
     - color abstraction.
-    - transforms.
     - rects.
+    - path id for stroke caching.
     - tiling & mt.
 
 - stuff ig:

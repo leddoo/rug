@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use sti::alloc::*;
 use sti::simd::*;
 use sti::float::F32Ext;

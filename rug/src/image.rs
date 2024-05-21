@@ -169,12 +169,10 @@ pub struct Image<T: Copy, A: Alloc = GlobalAlloc> {
 }
 
 impl<T: Copy> Image<T> {
-    #[track_caller]
     pub fn new(size: [u32; 2]) -> Self  where T: Default {
         Self::with_clear_in(size, T::default(), GlobalAlloc)
     }
 
-    #[track_caller]
     pub fn with_clear(size: [u32; 2], clear: T) -> Self {
         Self::with_clear_in(size, clear, GlobalAlloc)
     }

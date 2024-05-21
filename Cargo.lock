@@ -519,8 +519,8 @@ dependencies = [
 
 [[package]]
 name = "sti"
-version = "0.1.11"
-source = "git+https://github.com/leddoo/sti#314f6ee959b953dc4ecf3509d4b55513aed89b47"
+version = "0.6.0"
+source = "git+https://github.com/leddoo/sti#f463c4880d9352c0a7c1c3a5bcc148f57a285311"
 
 [[package]]
 name = "svgtypes"
