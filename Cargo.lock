@@ -182,6 +182,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "forkyou"
+version = "0.1.0"
+dependencies = [
+ "sti",
+]
+
+[[package]]
 name = "futures-core"
 version = "0.3.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -481,6 +488,7 @@ dependencies = [
 name = "rug"
 version = "0.1.0"
 dependencies = [
+ "forkyou",
  "sti",
 ]
 

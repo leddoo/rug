@@ -26,6 +26,12 @@ pub struct ImgImpl<'a, T: Copy, const MUT: bool> {
 pub type Img<'a, T>    = ImgImpl<'a, T, false>;
 pub type ImgMut<'a, T> = ImgImpl<'a, T, true>;
 
+unsafe impl<'a, T: Copy + Sync> Sync for Img<'a, T> {}
+unsafe impl<'a, T: Copy + Sync> Send for Img<'a, T> {}
+
+unsafe impl<'a, T: Copy + Sync> Sync for ImgMut<'a, T> {}
+unsafe impl<'a, T: Copy + Send> Send for ImgMut<'a, T> {}
+
 
 impl<'a, T: Copy, const MUT: bool> ImgImpl<'a, T, MUT> {
     #[inline(always)]
@@ -96,6 +102,7 @@ impl<'a, T: Copy> ImgMut<'a, T> {
 
     pub fn copy_expand<U: Copy, const N: usize, F: Fn(U) -> [T; N]>
         (&mut self, src: &Img<U>, to: I32x2, f: F)
+    where T: Send, U: Sync, F: Sync
     {
         let size_x = src.width()  as i32 * N as i32;
         let size_y = src.height() as i32;
@@ -110,14 +117,14 @@ impl<'a, T: Copy> ImgMut<'a, T> {
 
         let stride = self.stride;
         let data = self.data_mut();
-        let start = begin_y*stride + begin_x;
+        let data_begin = begin_y*stride + begin_x;
+        let data_end = data_begin + h*stride;
 
-        for dy in 0..h {
-            let base = start + dy*stride;
-
+        use forkyou::{Spliterator, SpliterChunksMut};
+        forkyou::for_each(data[data_begin..data_end].spliter_chunks_mut(stride).enumerate(), |(dy, data)| {
             for u in 0 .. (w / N) {
                 let c = f(src[(u, dy)]);
-                let i0 = base + u*N;
+                let i0 = u*N;
                 data[i0 .. i0 + N].copy_from_slice(&c);
             }
 
@@ -125,10 +132,10 @@ impl<'a, T: Copy> ImgMut<'a, T> {
             if rem > 0 {
                 let u = w / N;
                 let c = f(src[(u, dy)]);
-                let i0 = base + u*N;
+                let i0 = u*N;
                 data[i0 .. i0 + rem].copy_from_slice(&c[0..rem]);
             }
-        }
+        });
     }
 }
 
